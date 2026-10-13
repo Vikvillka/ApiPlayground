@@ -1,0 +1,81 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>ApiPlayground — Empty request workspace</title>
+  <style>
+    /* Governing spines: DESIGN.md Colors, Layout & Spacing, Components; EXPERIENCE.md Information Architecture, State Patterns, Key Flows. */
+    :root {
+      color-scheme: light;
+      --background: #F3F5F7;
+      --surface: #FFFFFF;
+      --text: #26313D;
+      --muted: #667483;
+      --border: #D9E0E6;
+      --action: #315F83;
+      --accent: #347B78;
+      --error: #B34242;
+      --sans: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      --mono: ui-monospace, SFMono-Regular, Consolas, "Liberation Mono", monospace;
+      --radius: 6px;
+      font-family: var(--sans);
+      color: var(--text);
+      background: var(--background);
+    }
+    * { box-sizing: border-box; }
+    body { margin: 0; padding: 24px; }
+    button, input { font: inherit; }
+    button:focus-visible, input:focus-visible { outline: 3px solid var(--action); outline-offset: 2px; }
+    .browser { max-width: 1440px; min-height: 820px; margin: auto; overflow: hidden; border: 2px solid var(--action); border-radius: var(--radius); background: var(--surface); }
+    .chrome { display: flex; align-items: center; gap: 16px; min-height: 54px; padding: 0 18px; background: var(--background); border-bottom: 1px solid var(--border); }
+    .chrome-title { font-weight: 650; }
+    .local { flex: 1; padding: 7px 12px; border: 1px solid var(--border); border-radius: var(--radius); background: var(--surface); color: var(--text); font: 13px var(--mono); }
+    header { display: flex; align-items: center; min-height: 64px; padding: 0 24px; border-bottom: 1px solid var(--border); font-weight: 650; }
+    .layout { display: grid; grid-template-columns: 62px minmax(0, 1fr); min-height: 700px; }
+    aside { display: flex; align-items: center; flex-direction: column; gap: 14px; padding: 18px 8px; border-right: 1px solid var(--border); }
+    .expand { width: 38px; height: 38px; border: 2px solid var(--action); border-radius: var(--radius); background: var(--surface); color: var(--action); font-size: 20px; }
+    .side-label { margin: 4px 0; font-size: 12px; font-weight: 600; writing-mode: vertical-rl; transform: rotate(180deg); }
+    main { padding: 24px; }
+    .panes { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 20px; }
+    section { min-width: 0; min-height: 620px; padding: 18px; border: 1px solid var(--border); border-radius: var(--radius); background: var(--surface); }
+    h1, h2 { margin: 0 0 18px; font-size: 18px; }
+    .request { display: grid; grid-template-columns: 92px minmax(0, 1fr) 84px; align-items: center; gap: 8px; min-height: 48px; padding: 5px; border: 2px solid var(--action); border-radius: var(--radius); }
+    .method { text-align: center; color: var(--accent); font: 700 14px var(--mono); }
+    .url { min-width: 0; height: 36px; padding: 0 10px; border: 0; color: var(--text); }
+    .url::placeholder { color: var(--muted); opacity: 1; }
+    .send { height: 34px; border: 2px dashed var(--border); border-radius: var(--radius); background: var(--surface); color: var(--muted); cursor: not-allowed; }
+    nav { display: flex; gap: 24px; margin-top: 14px; border-bottom: 1px solid var(--border); }
+    nav button { padding: 12px 2px; border: 0; border-bottom: 3px solid transparent; background: transparent; color: var(--muted); }
+    .editor-space { min-height: 450px; }
+    .tabs { display: flex; gap: 22px; border-bottom: 1px solid var(--border); }
+    .tabs button { padding: 12px 2px; border: 0; border-bottom: 3px solid transparent; background: transparent; color: var(--muted); }
+    .tabs [aria-selected="true"] { border-bottom-color: var(--action); color: var(--action); font-weight: 700; text-decoration: underline; text-underline-offset: 5px; }
+    .prompt { display: grid; min-height: 500px; place-items: center; padding: 24px; text-align: center; }
+    .prompt p { max-width: 320px; margin: 0; line-height: 1.5; }
+    @media (max-width: 980px) { body { padding: 12px; } .browser { min-height: 0; } .layout { min-height: 0; } main { padding: 16px; } .panes { grid-template-columns: 1fr; } section { min-height: 440px; } .editor-space { min-height: 250px; } .prompt { min-height: 280px; } }
+  </style>
+</head>
+<body>
+  <div class="browser">
+    <div class="chrome"><span aria-hidden="true">‹　›　↻</span><span class="chrome-title">ApiPlayground</span><div class="local">localhost</div><span aria-hidden="true">···</span></div>
+    <header>ApiPlayground</header>
+    <div class="layout">
+      <aside aria-label="History and Collections, collapsed"><button class="expand" aria-label="Expand History and Collections">›</button><p class="side-label">History &amp; Collections</p></aside>
+      <main>
+        <div class="panes">
+          <section aria-labelledby="request"><h1 id="request">Request</h1>
+            <div class="request"><div class="method">GET　⌄</div><input class="url" aria-label="Request URL" placeholder="Enter URL"><button class="send" disabled>Send</button></div>
+            <nav aria-label="Request sections"><button>Params</button><button>Headers</button><button>Body</button></nav>
+            <div class="editor-space" aria-hidden="true"></div>
+          </section>
+          <section aria-labelledby="response"><h2 id="response">Response</h2>
+            <div class="tabs" role="tablist" aria-label="Response content"><button role="tab" aria-selected="true">Body</button><button role="tab" aria-selected="false">Headers</button></div>
+            <div class="prompt" role="tabpanel" aria-label="Response body"><p>Enter a URL to send a request.</p></div>
+          </section>
+        </div>
+      </main>
+    </div>
+  </div>
+</body>
+</html>

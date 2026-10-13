@@ -1,0 +1,212 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>ApiPlayground — Light color theme studies</title>
+  <style>
+    /* Shared palette values are scoped to each study. Concrete HEX values are documented below. */
+    * { box-sizing: border-box; }
+    :root {
+      color-scheme: light;
+      font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      font-synthesis: none;
+      text-rendering: optimizeLegibility;
+      background: #f1f3f5;
+      color: #1d2733;
+    }
+    body { margin: 0; padding: 34px clamp(18px, 4vw, 60px) 48px; }
+    .page { max-width: 1500px; margin: 0 auto; }
+    .page-heading { display: flex; align-items: flex-end; justify-content: space-between; gap: 24px; margin: 0 0 24px; }
+    .eyebrow { margin: 0 0 8px; color: #66717e; font-size: 11px; font-weight: 750; letter-spacing: .12em; text-transform: uppercase; }
+    h1 { margin: 0; color: #19232e; font-size: clamp(24px, 3vw, 34px); letter-spacing: -.035em; line-height: 1.1; }
+    .intro { max-width: 390px; margin: 0; color: #606b77; font-size: 13px; line-height: 1.55; }
+    .studies { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 18px; }
+    .study {
+      --background: #f4f5f6; --surface: #ffffff; --text: #202a35; --muted: #687482;
+      --border: #dce1e6; --primary: #285d85; --accent: #367c7a; --error: #b34343;
+      min-width: 0; overflow: hidden; border: 1px solid #d7dce1; border-radius: 13px;
+      background: #fff; box-shadow: 0 2px 9px rgb(23 34 45 / 4%);
+    }
+    .study-head { padding: 17px 19px 13px; border-bottom: 1px solid #e7eaed; }
+    .title-line { display: flex; align-items: baseline; gap: 10px; }
+    .index { color: #818b96; font-size: 10px; font-weight: 750; letter-spacing: .1em; }
+    h2 { margin: 0; color: #202a35; font-size: 16px; letter-spacing: -.015em; }
+    .register { margin: 4px 0 0 30px; color: #697582; font-size: 12px; }
+    .tokens { display: flex; flex-wrap: wrap; gap: 6px; padding: 12px 18px; }
+    .token { display: inline-flex; align-items: center; gap: 5px; min-height: 22px; padding: 3px 6px 3px 4px; border: 1px solid #e3e6e9; border-radius: 999px; background: #fff; color: #515c68; font-size: 9px; white-space: nowrap; }
+    .swatch { width: 12px; height: 12px; flex: 0 0 12px; border: 1px solid rgb(0 0 0 / 12%); border-radius: 50%; }
+    .token b { color: #37424e; font-weight: 700; }
+    .app { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); min-height: 244px; border-top: 1px solid #e7eaed; background: var(--background); color: var(--text); }
+    .pane { min-width: 0; padding: 13px; }
+    .pane + .pane { border-left: 1px solid var(--border); }
+    .pane-title { display: flex; align-items: center; justify-content: space-between; margin: 0 0 11px; color: var(--text); font-size: 11px; font-weight: 750; }
+    .pane-title small { color: var(--muted); font-size: 9px; font-weight: 550; }
+    .request-row { display: flex; min-width: 0; height: 31px; overflow: hidden; border: 1px solid var(--border); border-radius: 5px; background: var(--surface); }
+    .method { display: flex; align-items: center; padding: 0 8px; color: var(--accent); font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 9px; font-weight: 800; }
+    .url { display: flex; align-items: center; min-width: 0; overflow: hidden; padding: 0 6px; border-left: 1px solid var(--border); color: var(--muted); font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 8px; text-overflow: ellipsis; white-space: nowrap; }
+    .send { align-self: center; flex: 0 0 auto; margin: 0 4px 0 auto; padding: 5px 8px; border: 0; border-radius: 4px; background: var(--primary); color: #fff; font: inherit; font-size: 9px; font-weight: 700; }
+    .tabs { display: flex; gap: 13px; margin: 11px 0 8px; border-bottom: 1px solid var(--border); }
+    .tab { padding: 0 0 6px; color: var(--muted); font-size: 9px; }
+    .tab.active { border-bottom: 2px solid var(--primary); color: var(--primary); font-weight: 750; }
+    .field-head, .kv { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.15fr); gap: 8px; }
+    .field-head { padding: 0 4px 5px; color: var(--muted); font-size: 8px; }
+    .kv { margin-bottom: 5px; padding: 5px 6px; border: 1px solid var(--border); border-radius: 4px; background: var(--surface); font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 8px; }
+    .kv span:first-child { color: var(--text); }
+    .kv span:last-child { overflow: hidden; color: var(--muted); text-overflow: ellipsis; white-space: nowrap; }
+    .response-meta { display: flex; align-items: center; gap: 7px; margin: 0 0 10px; }
+    .status { display: inline-flex; align-items: center; gap: 4px; color: var(--accent); font-size: 9px; font-weight: 750; }
+    .status-mark { display: grid; width: 14px; height: 14px; place-items: center; border: 1px solid currentColor; border-radius: 50%; font-size: 9px; line-height: 1; }
+    .time { color: var(--muted); font-size: 9px; }
+    .response-tabs { display: flex; gap: 11px; margin-bottom: 8px; border-bottom: 1px solid var(--border); }
+    .response-tabs span { padding: 0 0 6px; color: var(--muted); font-size: 9px; }
+    .response-tabs span:first-child { border-bottom: 2px solid var(--primary); color: var(--primary); font-weight: 750; }
+    .codebox { min-height: 88px; padding: 9px; border: 1px solid var(--border); border-radius: 5px; background: var(--surface); color: var(--text); font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 8px; line-height: 1.7; white-space: pre-wrap; }
+    .code-key { color: var(--primary); }
+    .code-value { color: var(--accent); }
+    .focus-sample { outline: 2px solid var(--primary); outline-offset: 2px; }
+    .footnote { margin: 11px 18px 15px; color: #77818c; font-size: 10px; line-height: 1.45; }
+
+    /* 01 Neutral Technical — background #F3F5F7; surface #FFFFFF; text #26313D; muted #667483; border #D9E0E6; primary/action #315F83; accent #347B78; error #B34242. */
+    .neutral { --background: #F3F5F7; --surface: #FFFFFF; --text: #26313D; --muted: #667483; --border: #D9E0E6; --primary: #315F83; --accent: #347B78; --error: #B34242; }
+    /* 02 Cool Precise — background #EFF4F7; surface #FFFFFF; text #172B3D; muted #536D80; border #C8D8E2; primary/action #075D75; accent #3664A0; error #A8323C. */
+    .cool { --background: #EFF4F7; --surface: #FFFFFF; --text: #172B3D; --muted: #536D80; --border: #C8D8E2; --primary: #075D75; --accent: #3664A0; --error: #A8323C; }
+    /* 03 Warm Paper-like — background #F7F3EB; surface #FFFEFA; text #352D25; muted #75685A; border #DED3C2; primary/action #80502F; accent #536B4C; error #A13D35. */
+    .paper { --background: #F7F3EB; --surface: #FFFEFA; --text: #352D25; --muted: #75685A; --border: #DED3C2; --primary: #80502F; --accent: #536B4C; --error: #A13D35; }
+    /* 04 High-contrast Utilitarian — background #F2F3F4; surface #FFFFFF; text #17191C; muted #4F5964; border #AEB6BF; primary/action #174F9C; accent #176B55; error #A32020. */
+    .utility { --background: #F2F3F4; --surface: #FFFFFF; --text: #17191C; --muted: #4F5964; --border: #AEB6BF; --primary: #174F9C; --accent: #176B55; --error: #A32020; }
+
+    @media (max-width: 850px) {
+      .studies { grid-template-columns: 1fr; }
+      .page-heading { align-items: flex-start; flex-direction: column; gap: 9px; }
+      .intro { max-width: 600px; }
+    }
+    @media (max-width: 460px) {
+      body { padding: 24px 12px 32px; }
+      .app { grid-template-columns: 1fr; }
+      .pane + .pane { border-top: 1px solid var(--border); border-left: 0; }
+    }
+  </style>
+</head>
+<body>
+  <main class="page">
+    <header class="page-heading">
+      <div>
+        <p class="eyebrow">ApiPlayground · Color studies</p>
+        <h1>Four light palette directions</h1>
+      </div>
+      <p class="intro">Palette studies for the same compact request-and-response workspace. These are options to compare, not a recorded theme decision.</p>
+    </header>
+
+    <div class="studies">
+      <article class="study neutral" aria-labelledby="neutral-title">
+        <header class="study-head">
+          <div class="title-line"><span class="index">01</span><h2 id="neutral-title">Neutral Technical</h2></div>
+          <p class="register">Steady, familiar, and quietly engineered.</p>
+        </header>
+        <div class="tokens" aria-label="Semantic color tokens">
+          <span class="token"><i class="swatch" style="background:#F3F5F7"></i><b>Background</b> #F3F5F7</span><span class="token"><i class="swatch" style="background:#FFFFFF"></i><b>Surface</b> #FFFFFF</span><span class="token"><i class="swatch" style="background:#26313D"></i><b>Text</b> #26313D</span><span class="token"><i class="swatch" style="background:#667483"></i><b>Muted</b> #667483</span><span class="token"><i class="swatch" style="background:#D9E0E6"></i><b>Border</b> #D9E0E6</span><span class="token"><i class="swatch" style="background:#315F83"></i><b>Primary/action</b> #315F83</span><span class="token"><i class="swatch" style="background:#347B78"></i><b>Accent</b> #347B78</span><span class="token"><i class="swatch" style="background:#B34242"></i><b>Error</b> #B34242</span>
+        </div>
+        <div class="app">
+          <section class="pane" aria-label="Request editor preview">
+            <h3 class="pane-title">Request <small>Unsaved</small></h3>
+            <div class="request-row"><span class="method">GET</span><span class="url">https://api.example.com/users</span><button class="send" type="button">Send</button></div>
+            <div class="tabs"><span class="tab active">Params</span><span class="tab">Headers</span><span class="tab">Body</span></div>
+            <div class="field-head"><span>Key</span><span>Value</span></div>
+            <div class="kv"><span>limit</span><span>20</span></div>
+            <div class="kv"><span>active</span><span>true</span></div>
+          </section>
+          <section class="pane" aria-label="Response preview">
+            <h3 class="pane-title">Response <small>Latest</small></h3>
+            <div class="response-meta"><span class="status"><i class="status-mark">✓</i>200 OK</span><span class="time">· 184 ms</span></div>
+            <div class="response-tabs"><span>Body</span><span>Headers</span></div>
+            <div class="codebox">{<br>  <span class="code-key">"id"</span>: <span class="code-value">42</span>,<br>  <span class="code-key">"name"</span>: <span class="code-value">"Ada Lovelace"</span><br>}</div>
+          </section>
+        </div>
+        <p class="footnote">Balanced blue action and restrained teal status; familiar neutral surfaces keep the request data central.</p>
+      </article>
+
+      <article class="study cool" aria-labelledby="cool-title">
+        <header class="study-head">
+          <div class="title-line"><span class="index">02</span><h2 id="cool-title">Cool Precise</h2></div>
+          <p class="register">Crisp, composed, and quietly exact.</p>
+        </header>
+        <div class="tokens" aria-label="Semantic color tokens">
+          <span class="token"><i class="swatch" style="background:#EFF4F7"></i><b>Background</b> #EFF4F7</span><span class="token"><i class="swatch" style="background:#FFFFFF"></i><b>Surface</b> #FFFFFF</span><span class="token"><i class="swatch" style="background:#172B3D"></i><b>Text</b> #172B3D</span><span class="token"><i class="swatch" style="background:#536D80"></i><b>Muted</b> #536D80</span><span class="token"><i class="swatch" style="background:#C8D8E2"></i><b>Border</b> #C8D8E2</span><span class="token"><i class="swatch" style="background:#075D75"></i><b>Primary/action</b> #075D75</span><span class="token"><i class="swatch" style="background:#3664A0"></i><b>Accent</b> #3664A0</span><span class="token"><i class="swatch" style="background:#A8323C"></i><b>Error</b> #A8323C</span>
+        </div>
+        <div class="app">
+          <section class="pane" aria-label="Request editor preview">
+            <h3 class="pane-title">Request <small>Unsaved</small></h3>
+            <div class="request-row"><span class="method">GET</span><span class="url">https://api.example.com/users</span><button class="send" type="button">Send</button></div>
+            <div class="tabs"><span class="tab active">Params</span><span class="tab">Headers</span><span class="tab">Body</span></div>
+            <div class="field-head"><span>Key</span><span>Value</span></div>
+            <div class="kv"><span>limit</span><span>20</span></div>
+            <div class="kv"><span>active</span><span>true</span></div>
+          </section>
+          <section class="pane" aria-label="Response preview">
+            <h3 class="pane-title">Response <small>Latest</small></h3>
+            <div class="response-meta"><span class="status"><i class="status-mark">✓</i>200 OK</span><span class="time">· 184 ms</span></div>
+            <div class="response-tabs"><span>Body</span><span>Headers</span></div>
+            <div class="codebox">{<br>  <span class="code-key">"id"</span>: <span class="code-value">42</span>,<br>  <span class="code-key">"name"</span>: <span class="code-value">"Ada Lovelace"</span><br>}</div>
+          </section>
+        </div>
+        <p class="footnote">Blue-slate text, cool tinted canvas, and deeper cyan action create a more precise, instrument-like feel.</p>
+      </article>
+
+      <article class="study paper" aria-labelledby="paper-title">
+        <header class="study-head">
+          <div class="title-line"><span class="index">03</span><h2 id="paper-title">Warm Paper-like</h2></div>
+          <p class="register">Grounded, tactile, and easy on the eyes.</p>
+        </header>
+        <div class="tokens" aria-label="Semantic color tokens">
+          <span class="token"><i class="swatch" style="background:#F7F3EB"></i><b>Background</b> #F7F3EB</span><span class="token"><i class="swatch" style="background:#FFFEFA"></i><b>Surface</b> #FFFEFA</span><span class="token"><i class="swatch" style="background:#352D25"></i><b>Text</b> #352D25</span><span class="token"><i class="swatch" style="background:#75685A"></i><b>Muted</b> #75685A</span><span class="token"><i class="swatch" style="background:#DED3C2"></i><b>Border</b> #DED3C2</span><span class="token"><i class="swatch" style="background:#80502F"></i><b>Primary/action</b> #80502F</span><span class="token"><i class="swatch" style="background:#536B4C"></i><b>Accent</b> #536B4C</span><span class="token"><i class="swatch" style="background:#A13D35"></i><b>Error</b> #A13D35</span>
+        </div>
+        <div class="app">
+          <section class="pane" aria-label="Request editor preview">
+            <h3 class="pane-title">Request <small>Unsaved</small></h3>
+            <div class="request-row"><span class="method">GET</span><span class="url">https://api.example.com/users</span><button class="send" type="button">Send</button></div>
+            <div class="tabs"><span class="tab active">Params</span><span class="tab">Headers</span><span class="tab">Body</span></div>
+            <div class="field-head"><span>Key</span><span>Value</span></div>
+            <div class="kv"><span>limit</span><span>20</span></div>
+            <div class="kv"><span>active</span><span>true</span></div>
+          </section>
+          <section class="pane" aria-label="Response preview">
+            <h3 class="pane-title">Response <small>Latest</small></h3>
+            <div class="response-meta"><span class="status"><i class="status-mark">✓</i>200 OK</span><span class="time">· 184 ms</span></div>
+            <div class="response-tabs"><span>Body</span><span>Headers</span></div>
+            <div class="codebox">{<br>  <span class="code-key">"id"</span>: <span class="code-value">42</span>,<br>  <span class="code-key">"name"</span>: <span class="code-value">"Ada Lovelace"</span><br>}</div>
+          </section>
+        </div>
+        <p class="footnote">Warm ivory and quiet earth tones soften the interface without muting labels or response details.</p>
+      </article>
+
+      <article class="study utility" aria-labelledby="utility-title">
+        <header class="study-head">
+          <div class="title-line"><span class="index">04</span><h2 id="utility-title">High-contrast Utilitarian</h2></div>
+          <p class="register">Direct, decisive, and built for quick scanning.</p>
+        </header>
+        <div class="tokens" aria-label="Semantic color tokens">
+          <span class="token"><i class="swatch" style="background:#F2F3F4"></i><b>Background</b> #F2F3F4</span><span class="token"><i class="swatch" style="background:#FFFFFF"></i><b>Surface</b> #FFFFFF</span><span class="token"><i class="swatch" style="background:#17191C"></i><b>Text</b> #17191C</span><span class="token"><i class="swatch" style="background:#4F5964"></i><b>Muted</b> #4F5964</span><span class="token"><i class="swatch" style="background:#AEB6BF"></i><b>Border</b> #AEB6BF</span><span class="token"><i class="swatch" style="background:#174F9C"></i><b>Primary/action</b> #174F9C</span><span class="token"><i class="swatch" style="background:#176B55"></i><b>Accent</b> #176B55</span><span class="token"><i class="swatch" style="background:#A32020"></i><b>Error</b> #A32020</span>
+        </div>
+        <div class="app">
+          <section class="pane" aria-label="Request editor preview">
+            <h3 class="pane-title">Request <small>Unsaved</small></h3>
+            <div class="request-row"><span class="method">GET</span><span class="url">https://api.example.com/users</span><button class="send focus-sample" type="button">Send</button></div>
+            <div class="tabs"><span class="tab active">Params</span><span class="tab">Headers</span><span class="tab">Body</span></div>
+            <div class="field-head"><span>Key</span><span>Value</span></div>
+            <div class="kv"><span>limit</span><span>20</span></div>
+            <div class="kv"><span>active</span><span>true</span></div>
+          </section>
+          <section class="pane" aria-label="Response preview">
+            <h3 class="pane-title">Response <small>Latest</small></h3>
+            <div class="response-meta"><span class="status"><i class="status-mark">✓</i>200 OK</span><span class="time">· 184 ms</span></div>
+            <div class="response-tabs"><span>Body</span><span>Headers</span></div>
+            <div class="codebox">{<br>  <span class="code-key">"id"</span>: <span class="code-value">42</span>,<br>  <span class="code-key">"name"</span>: <span class="code-value">"Ada Lovelace"</span><br>}</div>
+          </section>
+        </div>
+        <p class="footnote">Near-black text, firmer dividers, and a clear blue action prioritize legibility and visible control boundaries.</p>
+      </article>
+    </div>
+  </main>
+</body>
+</html>

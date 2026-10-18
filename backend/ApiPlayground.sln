@@ -1,0 +1,24 @@
+Microsoft Visual Studio Solution File, Format Version 12.00
+# Visual Studio Version 17
+VisualStudioVersion = 17.0.31903.59
+MinimumVisualStudioVersion = 10.0.40219.1
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "ApiPlayground.Api", "src\ApiPlayground.Api\ApiPlayground.Api.csproj", "{2C90A654-5DA4-48B3-A2F4-6EFCD472C4C1}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "ApiPlayground.Tests", "tests\ApiPlayground.Tests\ApiPlayground.Tests.csproj", "{455C8502-2D7E-4E1C-8818-2A44F75F1399}"
+EndProject
+Global
+	GlobalSection(SolutionConfigurationPlatforms) = preSolution
+		Debug|Any CPU = Debug|Any CPU
+		Release|Any CPU = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(ProjectConfigurationPlatforms) = postSolution
+		{2C90A654-5DA4-48B3-A2F4-6EFCD472C4C1}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{2C90A654-5DA4-48B3-A2F4-6EFCD472C4C1}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{2C90A654-5DA4-48B3-A2F4-6EFCD472C4C1}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{2C90A654-5DA4-48B3-A2F4-6EFCD472C4C1}.Release|Any CPU.Build.0 = Release|Any CPU
+		{455C8502-2D7E-4E1C-8818-2A44F75F1399}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{455C8502-2D7E-4E1C-8818-2A44F75F1399}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{455C8502-2D7E-4E1C-8818-2A44F75F1399}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{455C8502-2D7E-4E1C-8818-2A44F75F1399}.Release|Any CPU.Build.0 = Release|Any CPU
+	EndGlobalSection
+EndGlobal

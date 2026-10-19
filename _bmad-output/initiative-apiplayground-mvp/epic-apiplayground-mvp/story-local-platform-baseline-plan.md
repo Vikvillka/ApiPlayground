@@ -3,7 +3,7 @@ title: 'Local platform baseline'
 type: 'feature'
 ticket: '1'
 created: '2026-10-18'
-status: 'built'
+status: done
 baseline_revision: '053bc00a1ab848d9bcd4a3e9bea2734f7c89cb3c'
 route: 'full'
 route_source: 'auto'

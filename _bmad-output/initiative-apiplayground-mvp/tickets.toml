@@ -6,3 +6,4 @@ slug = "epic-apiplayground-mvp"
 title = "ApiPlayground MVP"
 covers = ["CAP-1", "CAP-2", "CAP-3", "CAP-4"]
 after = []
+notes = ["The epic includes Backend Clean Architecture boundaries after Story 1 and before Story 2; see epic-apiplayground-mvp/tickets.toml."]

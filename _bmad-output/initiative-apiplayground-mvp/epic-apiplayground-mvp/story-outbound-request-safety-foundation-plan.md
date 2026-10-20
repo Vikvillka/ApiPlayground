@@ -3,7 +3,7 @@ title: 'Outbound request safety foundation'
 type: 'feature'
 ticket: '2'
 created: '2026-10-20'
-status: 'built'
+status: done
 baseline_revision: '9b39ea0ef409751f5365504531da6a426ed762a9'
 route: 'full'
 route_source: 'pinned'

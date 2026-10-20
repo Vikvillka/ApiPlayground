@@ -26,6 +26,20 @@ jobs:
 
   backend:
     runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: postgres
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d postgres"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-dotnet@v4
@@ -34,3 +48,5 @@ jobs:
       - run: dotnet restore backend/ApiPlayground.sln
       - run: dotnet build backend/ApiPlayground.sln --configuration Release --no-restore
       - run: dotnet test backend/ApiPlayground.sln --configuration Release --no-build
+        env:
+          APIPLAYGROUND_TEST_ADMIN_CONNECTION: Host=localhost;Port=5432;Database=postgres;Username=postgres;Password=postgres

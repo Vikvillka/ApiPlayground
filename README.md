@@ -27,13 +27,13 @@ psql -U postgres -c "CREATE ROLE apiplayground LOGIN PASSWORD 'local-only-change
 createdb -U postgres -O apiplayground apiplayground
 ```
 
-The repository-root `.env.example` documents the non-secret connection setting. Copy its connection-string value into the current shell, replacing the sample password:
+The API requires runtime configuration; it has no fallback database credential. Set its connection string in the current shell, replacing the local password:
 
 ```powershell
 $env:ConnectionStrings__Postgres = "Host=localhost;Port=5432;Database=apiplayground;Username=apiplayground;Password=your-local-password"
 ```
 
-The API also has a local-only default connection string matching the example role/database, so no environment variable is needed when those sample credentials are used.
+Do not commit local credentials or put them in `.env` files. Supply this setting to the API process and EF commands whenever they need a database connection.
 
 ## Install and initialize
 
@@ -48,11 +48,11 @@ dotnet tool restore
 Pop-Location
 dotnet restore backend/ApiPlayground.sln
 Push-Location backend
-dotnet ef database update --project src/ApiPlayground.Api --startup-project src/ApiPlayground.Api
+dotnet ef database update --project src/ApiPlayground.Infrastructure --startup-project src/ApiPlayground.Api
 Pop-Location
 ```
 
-The initial EF Core migration establishes the migration-history baseline. It intentionally contains no product tables; later approved stories add application data models. Applying it again is safe.
+Infrastructure owns the single EF Core migration assembly and history stream. The initial migration establishes that baseline under its original ID. It intentionally contains no product tables; later approved stories add application data models. Applying it again is safe.
 
 ## Run locally
 
@@ -82,13 +82,21 @@ Open the local Vite address printed in the terminal (normally `http://127.0.0.1:
 ```powershell
 Push-Location frontend
 npm run build
-npm test
 Pop-Location
 dotnet build backend/ApiPlayground.sln
-dotnet test backend/ApiPlayground.sln
 ```
 
-The API health test uses ASP.NET Core's in-process test host. The controlled-target self-test verifies readiness and a zero dispatch count without calling its handler. Neither test contacts an external service.
+The API health test uses ASP.NET Core's in-process test host. The controlled-target self-test verifies readiness and a zero dispatch count without calling its handler. Neither test contacts an external service. PostgreSQL migration tests require a disposable test-admin connection and fail rather than skip when it is missing or unavailable. Configure a local role permitted to create/drop databases against the PostgreSQL maintenance database (never the application database):
+
+```powershell
+$env:APIPLAYGROUND_TEST_ADMIN_CONNECTION = "Host=localhost;Port=5432;Database=postgres;Username=your-test-admin;Password=your-local-password"
+Push-Location frontend
+npm test
+Pop-Location
+dotnet test backend/ApiPlayground.sln --configuration Release
+```
+
+Tests only create/drop databases with generated `apg_mig_` names. CI provisions PostgreSQL 17 and passes an ephemeral service connection.
 
 ## Troubleshooting
 
@@ -96,4 +104,5 @@ The API health test uses ASP.NET Core's in-process test host. The controlled-tar
 - **Password authentication failed:** set `ConnectionStrings__Postgres` in the shell running EF commands and the API, matching the local role's password.
 - **Database or role already exists:** keep the existing local objects and skip their creation; then apply the migration again.
 - **`dotnet ef` is unavailable:** run `dotnet tool restore` from the `backend` directory.
+- **Migration tests cannot connect:** set `APIPLAYGROUND_TEST_ADMIN_CONNECTION` to a PostgreSQL maintenance database and verify the role can create and drop databases; never point it at `apiplayground`.
 - **Build/test package restore fails:** verify access to the configured NuGet/npm package feeds, then rerun restore and the failing command.

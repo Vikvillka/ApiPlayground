@@ -3,7 +3,7 @@ title: 'Backend Clean Architecture boundaries'
 type: 'refactor'
 ticket: '10'
 created: '2026-10-19'
-status: 'built'
+status: done
 baseline_revision: '63e7378be057a8acf973d13eb1dd20ede5ec6726'
 route: 'full'
 route_source: 'auto'

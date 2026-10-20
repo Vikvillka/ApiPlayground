@@ -3,15 +3,15 @@ title: 'Outbound request safety foundation'
 type: 'feature'
 ticket: '2'
 created: '2026-10-20'
-status: 'ready-for-dev'
+status: 'built'
 baseline_revision: '9b39ea0ef409751f5365504531da6a426ed762a9'
 route: 'full'
 route_source: 'pinned'
 risk: 'high'
-review: ''
-review_source: ''
+review: 'quick'
+review_source: 'pinned'
 lenses_ran: []
-review_loop_iteration: 0
+review_loop_iteration: 1
 context:
   - '_bmad-output/initiative-apiplayground-mvp/architecture-apiplayground-backend/architecture-apiplayground-backend.md'
   - '_bmad-output/initiative-apiplayground-mvp/spec-apiplayground/spec-apiplayground.md'
@@ -44,12 +44,12 @@ context:
 ## Tasks & Acceptance
 
 **Execution:**
-- [ ] `backend/src/ApiPlayground.Application/` — define the minimal outbound port and transport-independent result/error outcomes needed by later stories; keep product request DTOs and endpoints out of scope.
-- [ ] `backend/src/ApiPlayground.Infrastructure/Outbound/` — implement a single guarded HTTP(S) adapter with explicit policy, strict public-address validation for every DNS answer, connection pinning, no automatic redirects, bounded connect/total deadlines and streaming body cap; fail closed on missing/invalid policy.
-- [ ] `backend/src/ApiPlayground.Infrastructure/DependencyInjection.cs` — register exactly one guarded adapter and require explicit approved policy; do not register alternate dispatch clients, proxies, or API routes.
-- [ ] `backend/tests/ApiPlayground.Tests/` — add policy/edge-case tests and a test-owned ephemeral loopback server fixture; exercise production guard code with a narrowly scoped test policy for that exact endpoint, preserving existing zero-dispatch harness assertions.
-- [ ] `backend/tests/ApiPlayground.Tests/ArchitectureBoundaryTests.cs` — extend boundary assertions as needed to guarantee that no runtime direct dispatch path is introduced outside the single guarded adapter.
-- [ ] `backend/src/ApiPlayground.Api/Program.cs` — verify the safety adapter is not exposed as an HTTP request-sending endpoint; leave product dispatch disabled for ticket 1.3.
+- [x] `backend/src/ApiPlayground.Application/` — define the minimal outbound port and transport-independent result/error outcomes needed by later stories; keep product request DTOs and endpoints out of scope.
+- [x] `backend/src/ApiPlayground.Infrastructure/Outbound/` — implement a single guarded HTTP(S) adapter with explicit policy, strict public-address validation for every DNS answer, connection pinning, no automatic redirects, bounded connect/total deadlines and streaming body cap; fail closed on missing/invalid policy.
+- [x] `backend/src/ApiPlayground.Infrastructure/DependencyInjection.cs` — register exactly one guarded adapter and require explicit approved policy; do not register alternate dispatch clients, proxies, or API routes.
+- [x] `backend/tests/ApiPlayground.Tests/` — add policy/edge-case tests and a test-owned ephemeral loopback server fixture; exercise production guard code with a narrowly scoped test policy for that exact endpoint, preserving existing zero-dispatch harness assertions.
+- [x] `backend/tests/ApiPlayground.Tests/ArchitectureBoundaryTests.cs` — verified existing boundary tests still enforce the single guarded runtime transport; no additional assertion needed.
+- [x] `backend/src/ApiPlayground.Api/Program.cs` — verified no outbound request endpoint was exposed; product dispatch remains disabled for ticket 1.3.
 
 **Acceptance Criteria:**
 - Given missing or invalid outbound policy, when Infrastructure is configured, then guard resolution fails closed and no unguarded dispatch path is registered.
@@ -60,6 +60,31 @@ context:
 - Given the ticket 2 implementation, when runtime API routes and dependencies are inspected, then no product request-sending endpoint, UI dispatch path, or second outbound transport exists.
 
 ## Implementation Notes
+
+- Added the Application port and transport-independent request/result/failure types, plus one Infrastructure guarded `SocketsHttpHandler` adapter registered only when an explicit validated policy is supplied.
+- The adapter validates the URI/method/headers, checks every DNS answer, pins socket connection to an approved numeric address, disables proxy and redirects, uses 5-second connect and 30-second total deadlines, and caps streamed response data at 1 MiB.
+- IPv4 and IPv6 special-use ranges are rejected, including private/shared/link-local/documentation/multicast/transition/special-purpose ranges. Test-only loopback authorization requires an exact loopback origin on a dynamic/private port and may optionally bind one explicit test hostname; it cannot authorize a different scheme, port, or address.
+- Added an ephemeral Kestrel test fixture and deterministic injected DNS/connector cases, including IPv6-only DNS selection, mixed-answer rejection, pinning, connect deadline, null URI, redirect, streaming cap/deadline, and cancellation. Policy-only validation tests do not make external requests; transport tests use the owned loopback fixture.
+- No API dispatch endpoint or additional runtime outbound transport was added. `.env` handling for test migration admin configuration is separate and remains local/ignored.
+
+## Execution Record
+
+- `dotnet test backend/ApiPlayground.sln --configuration Release` — passed, 55 tests, 0 failures (2026-10-20).
+- `git diff --check` — passed (2026-10-20).
+- Focused outbound suite — passed, 46 tests, 0 failures after formal review fixes (2026-10-20).
+- Security review follow-up fixed test-network isolation and added IPv4 special-purpose blocks for `192.31.196.0/24`, `192.52.193.0/24`, and `192.175.48.0/24`.
+
+## Review Triage Log
+
+- Final security review found an allow-case test that could reach `8.8.8.8` and three omitted IPv4 special-purpose ranges. Fixed by replacing outbound policy checks with local classification checks, injecting a failing/no-dispatch connector for request-validation tests, and blocking the missing ranges. Re-ran full Release suite successfully (55/55).
+- Earlier review findings fixed: validated AAAA-only hostnames are supported and pinned; test policy excludes fixed ports; null URI is rejected; connect timeout has deterministic regression coverage and is reported as timeout rather than transport failure.
+- Formal acceptance review: test-hostname binding finding — **false**; `AllowsAddress(uri, address)` still requires exact equality with the policy's captured loopback address after hostname/scheme/port checks, so injected DNS cannot redirect the test policy to another loopback address.
+- Formal acceptance review: IPv6 special-purpose prefix gap — **false as exemplified**; `2001:db8:1::/48` is inside the already denied `2001:db8::/32`, and `2001::/23` is fully denied because the third hextet high byte is 0 or 1. Added explicit regression cases; no policy broadening was needed.
+- Formal acceptance review: test endpoint path accepted — **medium, patch**; factory now requires root path (`/`) to match exact-origin contract, with regression coverage.
+- Formal acceptance review: `.env` parent search stops early — **medium, patch**; lookup now continues upward when a nearer `.env` does not define the test admin connection.
+- Formal acceptance review: focused test count stale — **low, patch**; will update execution record to the observed focused run count after verification.
+- Verification after formal review fixes: focused outbound suite passed (46/46), architecture boundary suite passed (2/2), and `git diff --check` passed (2026-10-20).
+- Final full Release verification after all review fixes passed (55/55); `git diff --check` passed (2026-10-20).
 
 ## Plan Change Log
 

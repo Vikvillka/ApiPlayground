@@ -27,13 +27,13 @@ psql -U postgres -c "CREATE ROLE apiplayground LOGIN PASSWORD 'local-only-change
 createdb -U postgres -O apiplayground apiplayground
 ```
 
-The API requires runtime configuration; it has no fallback database credential. Set its connection string in the current shell, replacing the local password:
+The API requires runtime configuration; it has no fallback database credential. Copy `.env.example` to the ignored root `.env` and replace the local app-role password. The API process and EF CLI do not automatically load `.env`, so export its connection string in the current shell before starting them:
 
 ```powershell
-$env:ConnectionStrings__Postgres = "Host=localhost;Port=5432;Database=apiplayground;Username=apiplayground;Password=your-local-password"
+$env:ConnectionStrings__Postgres = (Get-Content .env | Where-Object { $_ -match '^ConnectionStrings__Postgres=' } | Select-Object -First 1) -replace '^ConnectionStrings__Postgres=', ''
 ```
 
-Do not commit local credentials or put them in `.env` files. Supply this setting to the API process and EF commands whenever they need a database connection.
+Do not commit local credentials. The ignored root `.env` keeps the local copy; migration tests read only their test-admin key directly from it, while the API and EF CLI consume the app connection through the exported process variable.
 
 ## Install and initialize
 
@@ -86,15 +86,26 @@ Pop-Location
 dotnet build backend/ApiPlayground.sln
 ```
 
-The API health test uses ASP.NET Core's in-process test host. The controlled-target self-test verifies readiness and a zero dispatch count without calling its handler. Neither test contacts an external service. PostgreSQL migration tests require a disposable test-admin connection and fail rather than skip when it is missing or unavailable. Configure a local role permitted to create/drop databases against the PostgreSQL maintenance database (never the application database):
+The API health test uses ASP.NET Core's in-process test host. The controlled-target self-test verifies readiness and a zero dispatch count without calling its handler. Outbound safety tests use a test-owned loopback server and do not call external APIs. PostgreSQL migration tests require a disposable test-admin connection and fail rather than skip when it is missing or unavailable. Configure a local role permitted to create/drop databases against the PostgreSQL maintenance database (never the application database). Put the test connection in the ignored root `.env` file, or export it in the current shell:
 
 ```powershell
+# Option A: add APIPLAYGROUND_TEST_ADMIN_CONNECTION to the ignored root .env file.
+# Option B: set it in this shell:
 $env:APIPLAYGROUND_TEST_ADMIN_CONNECTION = "Host=localhost;Port=5432;Database=postgres;Username=your-test-admin;Password=your-local-password"
 Push-Location frontend
 npm test
 Pop-Location
 dotnet test backend/ApiPlayground.sln --configuration Release
 ```
+
+Migration tests prefer the process environment variable and otherwise read only `APIPLAYGROUND_TEST_ADMIN_CONNECTION` from the root `.env`; values are not printed or loaded into global process environment. The API itself does not load `.env`, so export `ConnectionStrings__Postgres` before running API/EF commands. Current local keys:
+
+```dotenv
+ConnectionStrings__Postgres=Host=localhost;Port=5432;Database=apiplayground;Username=apiplayground;Password=<your-local-app-role-password>
+APIPLAYGROUND_TEST_ADMIN_CONNECTION=Host=localhost;Port=5432;Database=postgres;Username=<your-test-admin-role>;Password=<your-test-admin-password>
+```
+
+The test-admin role must have `LOGIN` and `CREATEDB`; keep the test connection pointed at `postgres`, never `apiplayground`. `.env` is ignored by Git. CI continues to supply these settings directly and does not use `.env`.
 
 Tests only create/drop databases with generated `apg_mig_` names. CI provisions PostgreSQL 17 and passes an ephemeral service connection.
 

@@ -12,7 +12,7 @@ public sealed class MigrationContinuityTests
 
     public MigrationContinuityTests()
     {
-        _adminConnectionString = Environment.GetEnvironmentVariable("APIPLAYGROUND_TEST_ADMIN_CONNECTION")
+        _adminConnectionString = GetTestAdminConnection()
             ?? throw new InvalidOperationException("APIPLAYGROUND_TEST_ADMIN_CONNECTION is required for PostgreSQL migration integration tests; tests never skip.");
         var admin = new NpgsqlConnectionStringBuilder(_adminConnectionString);
         if (string.IsNullOrWhiteSpace(admin.Host)
@@ -21,6 +21,31 @@ public sealed class MigrationContinuityTests
         {
             throw new InvalidOperationException("APIPLAYGROUND_TEST_ADMIN_CONNECTION must target the PostgreSQL maintenance database 'postgres'; application databases are never accepted.");
         }
+    }
+
+    private static string? GetTestAdminConnection()
+    {
+        var environmentValue = Environment.GetEnvironmentVariable("APIPLAYGROUND_TEST_ADMIN_CONNECTION");
+        if (!string.IsNullOrWhiteSpace(environmentValue))
+            return environmentValue;
+
+        var directory = new DirectoryInfo(Directory.GetCurrentDirectory());
+        while (directory is not null)
+        {
+            var envPath = Path.Combine(directory.FullName, ".env");
+            if (File.Exists(envPath))
+            {
+                var value = DotNetEnv.Env.NoEnvVars().Load(envPath)
+                    .LastOrDefault(pair => string.Equals(pair.Key, "APIPLAYGROUND_TEST_ADMIN_CONNECTION", StringComparison.Ordinal))
+                    .Value;
+                if (!string.IsNullOrWhiteSpace(value))
+                    return value;
+            }
+
+            directory = directory.Parent;
+        }
+
+        return null;
     }
 
     [Fact]

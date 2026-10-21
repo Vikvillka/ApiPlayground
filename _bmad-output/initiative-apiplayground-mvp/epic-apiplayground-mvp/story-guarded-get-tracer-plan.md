@@ -3,7 +3,7 @@ title: 'Guarded GET tracer'
 type: 'feature'
 ticket: '3'
 created: '2026-10-20'
-status: in-progress
+status: built
 baseline_revision: 'e9f1fb05c10d4e36e5abd67e98f46adb1ba9afef'
 route: 'full'
 route_source: 'auto'

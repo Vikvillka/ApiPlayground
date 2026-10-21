@@ -36,4 +36,11 @@ public static class DependencyInjection
         });
         return services;
     }
+
+    public static IServiceCollection AddTracerPersistenceSmokeCheck(this IServiceCollection services)
+    {
+        ArgumentNullException.ThrowIfNull(services);
+        services.AddScoped<ITracerPersistenceSmokeCheck, PostgresTracerPersistenceSmokeCheck>();
+        return services;
+    }
 }

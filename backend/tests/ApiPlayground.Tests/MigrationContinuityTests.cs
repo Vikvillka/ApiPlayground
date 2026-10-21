@@ -169,7 +169,7 @@ public sealed class MigrationContinuityTests
         });
     }
 
-    private async Task WithDisposableDatabase(Func<string, Task> test)
+    internal async Task WithDisposableDatabase(Func<string, Task> test)
     {
         var adminBuilder = new NpgsqlConnectionStringBuilder(_adminConnectionString);
         var databaseName = "apg_mig_" + Guid.NewGuid().ToString("N");

@@ -56,7 +56,7 @@ Infrastructure owns the single EF Core migration assembly and history stream. Th
 
 ## Run locally
 
-Run the API in one PowerShell terminal:
+Run the API on the approved loopback Host in one PowerShell terminal:
 
 ```powershell
 dotnet run --project backend/src/ApiPlayground.Api --urls http://localhost:5000
@@ -75,7 +75,7 @@ Push-Location frontend
 npm run dev -- --host 127.0.0.1
 ```
 
-Open the local Vite address printed in the terminal (normally `http://127.0.0.1:5173`). The scaffold does not call the API or dispatch HTTP requests.
+Open the local Vite address printed in the terminal (normally `http://127.0.0.1:5173`). The UI uses the Vite same-origin `/api` proxy, which preserves the browser Origin and forwards `Host: localhost:5000`. The tracer route accepts only `Host: localhost:5000`, `Origin: http://127.0.0.1:5173`, JSON content, and the `X-ApiPlayground-Request` header; do not expose the API to LAN interfaces or relax these checks. Runtime outbound requests use the public-only guarded policy. Automated dispatch tests use only their own exact ephemeral loopback target.
 
 ## Build and test
 

@@ -9,12 +9,12 @@ public sealed class GetTracerUseCase(
     IOutboundRequestExecutor executor,
     ITracerPersistenceSmokeCheck persistence)
 {
-    public async Task<GetTracerResult> ExecuteAsync(string targetUrl, CancellationToken cancellationToken = default)
+    public async Task<GetTracerResult> ExecuteAsync(OutboundRequest request, CancellationToken cancellationToken = default)
     {
-        if (!Uri.TryCreate(targetUrl, UriKind.Absolute, out var uri) || uri.Scheme is not ("http" or "https"))
+        if (request.Uri is null || !request.Uri.IsAbsoluteUri || request.Uri.Scheme is not ("http" or "https"))
             return new GetTracerResult(null, false, "Enter a valid absolute HTTP or HTTPS URL.");
 
-        var outbound = await executor.ExecuteAsync(new OutboundRequest(uri, "GET"), cancellationToken);
+        var outbound = await executor.ExecuteAsync(request, cancellationToken);
         if (outbound.Failure == OutboundFailure.PolicyRejected)
             return new GetTracerResult(outbound, false, "Blocked by security policy. Request not sent.");
         if (!outbound.Succeeded)

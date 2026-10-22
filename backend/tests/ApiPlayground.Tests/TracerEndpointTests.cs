@@ -5,6 +5,7 @@ using ApiPlayground.Application.Outbound;
 using ApiPlayground.Infrastructure.Outbound;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.AspNetCore.TestHost;
+using Microsoft.AspNetCore.Http;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 using Xunit;
@@ -115,6 +116,37 @@ public sealed class TracerEndpointTests
         Assert.Equal(0, executor.Calls);
     }
 
+    [Theory]
+    [InlineData("Host")]
+    [InlineData("Content-Length")]
+    [InlineData("Content-Type")]
+    public async Task Managed_request_headers_are_rejected_before_dispatch(string headerName)
+    {
+        var executor = new RecordingExecutor();
+        await using var factory = CreateFactory(executor);
+        using var request = CreateAllowedRequest("https://example.test/");
+        request.Content = JsonContent.Create(new { url = "https://example.test/", headers = new Dictionary<string, string> { [headerName] = "value" } });
+
+        using var response = await factory.CreateClient().SendAsync(request);
+
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+        Assert.Equal(0, executor.Calls);
+    }
+
+    [Fact]
+    public async Task URL_at_maximum_length_is_not_rejected_by_length_validation()
+    {
+        var executor = new RecordingExecutor();
+        await using var factory = CreateFactory(executor);
+        var url = "https://example.test/" + new string('a', 2048 - "https://example.test/".Length);
+        using var request = CreateAllowedRequest(url);
+
+        using var response = await factory.CreateClient().SendAsync(request);
+
+        Assert.Equal(HttpStatusCode.Forbidden, response.StatusCode);
+        Assert.Equal(1, executor.Calls);
+    }
+
     [Fact]
     public async Task Allowed_proxy_host_and_origin_pass_guard_and_reach_dispatch()
     {
@@ -176,6 +208,108 @@ public sealed class TracerEndpointTests
             Assert.True(payload.RequestSent);
         }
     }
+
+    [Theory]
+    [InlineData("GET", "")]
+    [InlineData("POST", "{\"hello\":\"world\"}")]
+    [InlineData("PUT", "{\"hello\":\"world\"}")]
+    [InlineData("PATCH", "{\"hello\":\"world\"}")]
+    [InlineData("DELETE", "")]
+    public async Task Configured_method_query_headers_and_optional_json_reach_guarded_target(string method, string body)
+    {
+        string? observedMethod = null;
+        string? observedQuery = null;
+        string? observedHeader = null;
+        string? observedBody = null;
+        await using var target = await Outbound.ControlledLoopbackServer.StartAsync(async context =>
+        {
+            observedMethod = context.Request.Method;
+            observedQuery = context.Request.QueryString.Value;
+            observedHeader = context.Request.Headers["X-Test-Value"].ToString();
+            using var reader = new StreamReader(context.Request.Body);
+            observedBody = await reader.ReadToEndAsync();
+            await context.Response.WriteAsync("ok");
+        });
+        var factory = CreateGuardedFactory(target.BaseAddress);
+        await using (factory)
+        using (var request = CreateAllowedRequest(target.BaseAddress + "?existing=one&tag=old&tag=again&tag=new%20value"))
+        {
+            request.Content = JsonContent.Create(new
+            {
+                url = target.BaseAddress + "?existing=one&tag=old&tag=again&tag=new%20value",
+                method,
+                body = string.IsNullOrEmpty(body) ? null : body,
+                headers = new Dictionary<string, string> { ["X-Test-Value"] = "configured" },
+            });
+            using var response = await factory.CreateClient().SendAsync(request);
+
+            Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+            Assert.Equal(method, observedMethod);
+            Assert.Equal("?existing=one&tag=old&tag=again&tag=new%20value", observedQuery);
+            Assert.Equal("configured", observedHeader);
+            Assert.Equal(body, observedBody);
+        }
+    }
+
+    [Theory]
+    [InlineData("{not-json}", "POST")]
+    [InlineData("{\"x\":1}", "GET")]
+    [InlineData("{\"x\":1}", "DELETE")]
+    public async Task Invalid_json_or_body_method_is_rejected_before_dispatch(string body, string method)
+    {
+        var executor = new RecordingExecutor();
+        await using var factory = CreateFactory(executor);
+        using var request = CreateAllowedRequest("https://example.test/");
+        request.Content = JsonContent.Create(new { url = "https://example.test/", method, body });
+
+        using var response = await factory.CreateClient().SendAsync(request);
+
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+        Assert.Equal(0, executor.Calls);
+    }
+
+    [Fact]
+    public async Task Duplicate_header_names_are_rejected_before_dispatch_case_insensitively()
+    {
+        var executor = new RecordingExecutor();
+        await using var factory = CreateFactory(executor);
+        using var request = CreateAllowedRequest("https://example.test/");
+        request.Content = JsonContent.Create(new
+        {
+            url = "https://example.test/",
+            headers = new Dictionary<string, string> { ["X-Example"] = "one", ["x-example"] = "two" },
+        });
+
+        using var response = await factory.CreateClient().SendAsync(request);
+
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+        Assert.Equal(0, executor.Calls);
+    }
+
+    [Fact]
+    public async Task Unsupported_method_is_rejected_before_dispatch()
+    {
+        var executor = new RecordingExecutor();
+        await using var factory = CreateFactory(executor);
+        using var request = CreateAllowedRequest("https://example.test/");
+        request.Content = JsonContent.Create(new { url = "https://example.test/", method = "TRACE" });
+
+        using var response = await factory.CreateClient().SendAsync(request);
+
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+        Assert.Equal(0, executor.Calls);
+    }
+
+    private static WebApplicationFactory<Program> CreateGuardedFactory(Uri targetAddress) =>
+        new WebApplicationFactory<Program>().WithWebHostBuilder(builder => builder.ConfigureTestServices(services =>
+        {
+            services.RemoveAll<IOutboundRequestExecutor>();
+            services.AddSingleton<IOutboundRequestExecutor>(new GuardedTargetHttpClient(
+                OutboundPolicy.ForTestOnlyLoopbackEndpoint(targetAddress),
+                (_, _) => Task.FromResult(new[] { IPAddress.Loopback })));
+            services.RemoveAll<ITracerPersistenceSmokeCheck>();
+            services.AddSingleton<ITracerPersistenceSmokeCheck>(new SuccessfulPersistenceCheck());
+        }));
 
     [Fact]
     public async Task Policy_rejection_is_reported_as_not_sent()

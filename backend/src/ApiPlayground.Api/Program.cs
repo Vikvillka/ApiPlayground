@@ -50,8 +50,27 @@ app.MapPost("/api/tracer/get", async (TracerRequest request, GetTracerUseCase us
 {
 	if (string.IsNullOrWhiteSpace(request.Url) || request.Url.Length > 2048)
 		return Results.BadRequest(new { error = "Enter a URL to send a request." });
+	if (request.Method is not ("GET" or "POST" or "PUT" or "PATCH" or "DELETE"))
+		return Results.BadRequest(new { error = "Choose a supported HTTP method." });
+	if (!Uri.TryCreate(request.Url, UriKind.Absolute, out var uri) || uri.Scheme is not ("http" or "https") || uri.UserInfo.Length != 0 || uri.Fragment.Length != 0)
+		return Results.BadRequest(new { error = "Enter a valid absolute HTTP or HTTPS URL without credentials or fragments." });
+	if (request.Method is "GET" or "DELETE" && !string.IsNullOrWhiteSpace(request.Body))
+		return Results.BadRequest(new { error = "JSON bodies are only supported for POST, PUT, and PATCH." });
+	if (request.Body is { Length: > 0 } && !IsValidJson(request.Body))
+		return Results.BadRequest(new { error = "Enter a valid JSON body." });
+	if (request.Headers is not null && request.Headers.Keys.Distinct(StringComparer.OrdinalIgnoreCase).Count() != request.Headers.Count)
+		return Results.BadRequest(new { error = "Enabled request header names must be unique." });
+	if (request.Headers is not null && request.Headers.Any(header => string.IsNullOrWhiteSpace(header.Key) ||
+		header.Key.Equals("Host", StringComparison.OrdinalIgnoreCase) ||
+		header.Key.Equals("Content-Length", StringComparison.OrdinalIgnoreCase) ||
+		header.Key.Equals("Content-Type", StringComparison.OrdinalIgnoreCase)))
+		return Results.BadRequest(new { error = "Host, Content-Length, and Content-Type headers are managed by the request sender." });
 
-	var result = await useCase.ExecuteAsync(request.Url, cancellationToken);
+	var headers = request.Headers ?? new Dictionary<string, string>();
+	var contentType = string.IsNullOrWhiteSpace(request.Body) ? null : "application/json";
+	var outboundRequest = new OutboundRequest(uri, request.Method, headers,
+		string.IsNullOrWhiteSpace(request.Body) ? ReadOnlyMemory<byte>.Empty : System.Text.Encoding.UTF8.GetBytes(request.Body), contentType);
+	var result = await useCase.ExecuteAsync(outboundRequest, cancellationToken);
 	if (result.Outbound is null)
 		return Results.BadRequest(new { error = result.Error });
 	if (!result.Outbound.Succeeded && result.Outbound.Failure != OutboundFailure.PolicyRejected)
@@ -81,9 +100,26 @@ app.MapPost("/api/tracer/get", async (TracerRequest request, GetTracerUseCase us
 	}, statusCode: httpStatus);
 }).WithMetadata(new TracerRequestGuardMetadata());
 
+static bool IsValidJson(string body)
+{
+	try
+	{
+		using var document = System.Text.Json.JsonDocument.Parse(body);
+		return true;
+	}
+	catch (System.Text.Json.JsonException)
+	{
+		return false;
+	}
+}
+
 app.Run();
 
-public sealed record TracerRequest(string Url);
+public sealed record TracerRequest(
+	string Url,
+	string Method = "GET",
+	string? Body = null,
+	Dictionary<string, string>? Headers = null);
 public sealed class TracerRequestGuardMetadata;
 
 public partial class Program { }

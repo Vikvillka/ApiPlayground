@@ -8,14 +8,21 @@ export type TracerResponse = {
   requestSent: boolean;
 };
 
-export async function sendTracerGet(url: string): Promise<TracerResponse> {
+export type TracerRequest = {
+  url: string;
+  method: "GET" | "POST" | "PUT" | "PATCH" | "DELETE";
+  headers: Record<string, string>;
+  body?: string;
+};
+
+export async function sendTracerRequest(request: TracerRequest): Promise<TracerResponse> {
   const response = await fetch("/api/tracer/get", {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
       "X-ApiPlayground-Request": "1",
     },
-    body: JSON.stringify({ url }),
+    body: JSON.stringify(request),
   });
   const result = (await response.json()) as TracerResponse | { error?: string };
   if (!response.ok && "failure" in result && result.failure !== "PolicyRejected")

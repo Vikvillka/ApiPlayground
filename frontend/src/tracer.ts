@@ -2,6 +2,7 @@ export type TracerResponse = {
   failure: string;
   statusCode: number | null;
   elapsedMilliseconds: number;
+  headers: Record<string, string[]>;
   body: string;
   persistenceVerified: boolean;
   error: string | null;

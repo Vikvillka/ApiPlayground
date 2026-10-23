@@ -93,6 +93,7 @@ app.MapPost("/api/tracer/get", async (TracerRequest request, GetTracerUseCase us
 		failure = result.Outbound.Failure.ToString(),
 		statusCode = result.Outbound.StatusCode,
 		elapsedMilliseconds = result.Outbound.Elapsed.TotalMilliseconds,
+		headers = result.Outbound.Headers,
 		body = System.Text.Encoding.UTF8.GetString(result.Outbound.Body.Span),
 		persistenceVerified = result.PersistenceVerified,
 		error = result.Error,

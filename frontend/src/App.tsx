@@ -1,10 +1,11 @@
 import { platformName } from "./platform";
-import { useState, type FormEvent } from "react";
+import { useState, type FormEvent, type KeyboardEvent } from "react";
 import { sendTracerRequest, type TracerResponse } from "./tracer";
 import "./App.css";
 
 type RequestRow = { id: number; key: string; value: string; enabled: boolean };
 type RequestTab = "Params" | "Headers" | "Body";
+type ResponseTab = "Body" | "Headers";
 const methods = ["GET", "POST", "PUT", "PATCH", "DELETE"] as const;
 const makeRow = (id: number): RequestRow => ({ id, key: "", value: "", enabled: true });
 
@@ -12,6 +13,7 @@ export function App() {
   const [url, setUrl] = useState("");
   const [method, setMethod] = useState<(typeof methods)[number]>("GET");
   const [tab, setTab] = useState<RequestTab>("Params");
+  const [responseTab, setResponseTab] = useState<ResponseTab>("Body");
   const [params, setParams] = useState<RequestRow[]>([makeRow(1)]);
   const [headers, setHeaders] = useState<RequestRow[]>([makeRow(2)]);
   const [body, setBody] = useState("");
@@ -59,6 +61,7 @@ export function App() {
         ...(body.trim() && (method === "POST" || method === "PUT" || method === "PATCH") ? { body } : {}),
       });
       setResult(response);
+      setResponseTab("Body");
       setPreviousResult(false);
       if (response.error && response.failure !== "PolicyRejected")
         setError(response.error);
@@ -67,6 +70,24 @@ export function App() {
     } finally {
       setLoading(false);
     }
+  }
+
+  function handleResponseTabKeyDown(event: KeyboardEvent<HTMLButtonElement>) {
+    const tabs: ResponseTab[] = ["Body", "Headers"];
+    const currentIndex = tabs.indexOf(responseTab);
+    const nextIndex = event.key === "ArrowRight"
+      ? (currentIndex + 1) % tabs.length
+      : event.key === "ArrowLeft"
+        ? (currentIndex - 1 + tabs.length) % tabs.length
+        : event.key === "Home"
+          ? 0
+          : event.key === "End"
+            ? tabs.length - 1
+            : -1;
+    if (nextIndex < 0) return;
+    event.preventDefault();
+    setResponseTab(tabs[nextIndex]);
+    document.getElementById(`response-tab-${tabs[nextIndex].toLowerCase()}`)?.focus();
   }
 
   return (
@@ -124,9 +145,24 @@ export function App() {
           {!result && !error && !loading && <p>Enter a URL to send a request.</p>}
           {result && <div>
             {previousResult && <p className="previous-result" role="status">This result is for the previous request.</p>}
-            {result.requestSent && result.statusCode !== null && <p><strong>HTTP {result.statusCode}</strong> · {result.elapsedMilliseconds.toFixed(0)} ms</p>}
-            {result.error && <p role="alert">{result.error}</p>}
-            <pre>{formatResponseBody(result.body) || (result.requestSent ? "The response body is empty." : "Request not sent.")}</pre>
+            {result.requestSent && result.statusCode !== null && <p className="response-summary" role="status"><strong>HTTP {result.statusCode}</strong><span>{result.elapsedMilliseconds.toFixed(0)} ms</span></p>}
+            {result.error && <p role={result.requestSent ? "status" : "alert"}>{result.error}</p>}
+            {result.requestSent && result.statusCode !== null && <>
+              <div className="tabs response-tabs" role="tablist" aria-label="Response details">
+                {(["Body", "Headers"] as const).map(value => <button key={value} id={`response-tab-${value.toLowerCase()}`} type="button" role="tab" aria-controls={`response-panel-${value.toLowerCase()}`} aria-selected={responseTab === value} tabIndex={responseTab === value ? 0 : -1} onKeyDown={handleResponseTabKeyDown} onClick={() => setResponseTab(value)}>{value}</button>)}
+              </div>
+              {responseTab === "Body" && <div id="response-panel-body" role="tabpanel" aria-labelledby="response-tab-body" tabIndex={0}>
+                <pre>{formatResponseBody(result.body) || "The response body is empty."}</pre>
+              </div>}
+              {responseTab === "Headers" && <div id="response-panel-headers" role="tabpanel" aria-labelledby="response-tab-headers" tabIndex={0} className="response-headers">
+                {Object.entries(result.headers ?? {}).length === 0
+                  ? <p>No response headers.</p>
+                  : <dl>{Object.entries(result.headers ?? {}).map(([name, values]) => <div className="response-header" key={name}>
+                    <dt>{name}</dt>
+                    <dd>{values.map((value, index) => <div key={`${name}-${index}`}>{value}</div>)}</dd>
+                  </div>)}</dl>}
+              </div>}
+            </>}
           </div>}
         </section>
       </div>

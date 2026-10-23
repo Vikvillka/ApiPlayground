@@ -23,6 +23,13 @@ h2 { margin: 0 0 18px; font-size: 1.125rem; }
 .request-line button { height: 38px; border: 0; border-radius: 4px; background: #315F83; color: #fff; cursor: pointer; }
 .request-line button:disabled { border: 1px dashed #D9E0E6; background: #fff; color: #667483; cursor: not-allowed; }
 pre { overflow: auto; max-height: 520px; padding: 14px; border: 1px solid #D9E0E6; border-radius: 4px; background: #F3F5F7; white-space: pre-wrap; overflow-wrap: anywhere; font: .875rem/1.5 ui-monospace, Consolas, monospace; }
+.response-summary { display: flex; align-items: baseline; gap: 12px; }
+.response-summary strong, .response-summary span, .response-header dt, .response-header dd { font-family: ui-monospace, Consolas, monospace; }
+.response-headers dl { display: grid; gap: 10px; margin: 0; }
+.response-header { display: grid; grid-template-columns: minmax(120px, 1fr) minmax(0, 2fr); gap: 12px; padding: 10px; border: 1px solid #9BA9B5; border-radius: 4px; }
+.response-header dt { font-weight: 600; overflow-wrap: anywhere; }
+.response-header dd { display: grid; gap: 4px; min-width: 0; margin: 0; overflow-wrap: anywhere; }
+.response-header dd > div + div { padding-top: 4px; border-top: 1px solid #D9E0E6; }
 .tabs { display: flex; gap: 4px; margin: 18px 0 12px; border-bottom: 1px solid #D9E0E6; }
 .tabs button { padding: 8px 12px; border: 0; border-bottom: 3px solid transparent; background: transparent; color: #26313D; cursor: pointer; }
 .tabs button[aria-selected="true"] { border-bottom-color: #315F83; font-weight: 600; }

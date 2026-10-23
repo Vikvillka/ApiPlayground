@@ -209,6 +209,35 @@ public sealed class TracerEndpointTests
         }
     }
 
+    [Fact]
+    public async Task Http_error_response_preserves_target_status_elapsed_and_repeated_headers()
+    {
+        await using var target = await Outbound.ControlledLoopbackServer.StartAsync(async context =>
+        {
+            context.Response.StatusCode = StatusCodes.Status429TooManyRequests;
+            context.Response.Headers.Append("X-Observed", "first");
+            context.Response.Headers.Append("X-Observed", "second");
+            context.Response.Headers.Append("X-Only", "value");
+            await context.Response.WriteAsync("{\"error\":\"slow down\"}");
+        });
+        var factory = CreateGuardedFactory(target.BaseAddress);
+        await using (factory)
+        using (var request = CreateAllowedRequest(target.BaseAddress.ToString()))
+        using (var response = await factory.CreateClient().SendAsync(request))
+        {
+            Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+            var payload = await response.Content.ReadFromJsonAsync<TracerResponse>();
+            Assert.NotNull(payload);
+            Assert.Equal("None", payload.Failure);
+            Assert.Equal(429, payload.StatusCode);
+            Assert.True(payload.ElapsedMilliseconds >= 0);
+            Assert.Equal("{\"error\":\"slow down\"}", payload.Body);
+            Assert.Equal(new[] { "first", "second" }, payload.Headers["X-Observed"]);
+            Assert.Equal(new[] { "value" }, payload.Headers["X-Only"]);
+            Assert.True(payload.RequestSent);
+        }
+    }
+
     [Theory]
     [InlineData("GET", "")]
     [InlineData("POST", "{\"hello\":\"world\"}")]
@@ -367,5 +396,6 @@ public sealed class TracerEndpointTests
         public Task<bool> VerifyRoundTripAsync(CancellationToken cancellationToken = default) => Task.FromResult(true);
     }
 
-    private sealed record TracerResponse(string Failure, int? StatusCode, string Body, bool PersistenceVerified, string? Error, bool RequestSent);
+    private sealed record TracerResponse(string Failure, int? StatusCode, double ElapsedMilliseconds,
+        Dictionary<string, string[]> Headers, string Body, bool PersistenceVerified, string? Error, bool RequestSent);
 }

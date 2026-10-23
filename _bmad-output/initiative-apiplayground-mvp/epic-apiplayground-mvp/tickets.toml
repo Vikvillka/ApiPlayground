@@ -85,7 +85,7 @@ covers = ["CAP-3"]
 after = [1, 2, 4, 5, 10]
 hitl = false
 risk = "medium"
-unknown = "The project owner must decide the sensitive-header classification before History persists request values; until then, sensitive values must not be stored."
+notes = ["Decision: 2026-10-23 — History must omit values for Authorization, Proxy-Authorization, Cookie, and Set-Cookie, plus case-insensitive header names containing api-key/apikey, auth-token, access-token, refresh-token, or token; retain other header values."]
 references = ["../spec-apiplayground/spec-apiplayground.md#capabilities", "../ux-apiplayground/EXPERIENCE.md"]
 
 [[entry]]

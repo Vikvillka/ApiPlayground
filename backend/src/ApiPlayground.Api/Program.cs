@@ -8,6 +8,7 @@ builder.Services.AddInfrastructure(builder.Configuration.GetConnectionString("Po
 builder.Services.AddGuardedOutbound(OutboundPolicy.PublicInternetOnly());
 builder.Services.AddTracerPersistenceSmokeCheck();
 builder.Services.AddScoped<GetTracerUseCase>();
+builder.Services.AddScoped<RequestHistoryUseCase>();
 
 var app = builder.Build();
 
@@ -16,7 +17,7 @@ const string allowedOrigin = "http://127.0.0.1:5173";
 app.Use(async (context, next) =>
 {
 	var isTracerRequest = context.GetEndpoint()?.Metadata.GetMetadata<TracerRequestGuardMetadata>() is not null
-		|| HttpMethods.IsPost(context.Request.Method) && context.Request.Path.StartsWithSegments("/api/tracer/get", StringComparison.OrdinalIgnoreCase);
+				|| context.Request.Path.StartsWithSegments("/api/tracer", StringComparison.OrdinalIgnoreCase);
 	if (isTracerRequest)
 	{
 		var bodyLimit = context.Features.Get<Microsoft.AspNetCore.Http.Features.IHttpMaxRequestBodySizeFeature>();
@@ -32,7 +33,7 @@ app.Use(async (context, next) =>
 		var origin = context.Request.Headers.Origin.ToString();
 		var isAllowed = !string.IsNullOrEmpty(host) && allowedHosts.Contains(host) &&
 			string.Equals(origin, allowedOrigin, StringComparison.Ordinal) &&
-			string.Equals(context.Request.ContentType?.Split(';', 2)[0].Trim(), "application/json", StringComparison.OrdinalIgnoreCase) &&
+			(!HttpMethods.IsPost(context.Request.Method) || string.Equals(context.Request.ContentType?.Split(';', 2)[0].Trim(), "application/json", StringComparison.OrdinalIgnoreCase)) &&
 			context.Request.Headers.ContainsKey("X-ApiPlayground-Request");
 		if (!isAllowed)
 		{
@@ -46,6 +47,16 @@ app.Use(async (context, next) =>
 });
 
 app.MapGet("/health", () => Results.Ok(new { status = "healthy" }));
+app.MapGet("/api/tracer/history", async (RequestHistoryUseCase useCase, CancellationToken cancellationToken) =>
+{
+	var items = await useCase.ListAsync(cancellationToken);
+	return Results.Json(items.Select(ToHistoryDto));
+}).WithMetadata(new TracerRequestGuardMetadata());
+app.MapGet("/api/tracer/history/{id:guid}", async (Guid id, RequestHistoryUseCase useCase, CancellationToken cancellationToken) =>
+{
+	var item = await useCase.FindAsync(id, cancellationToken);
+	return item is null ? Results.NotFound() : Results.Json(ToHistoryDto(item));
+}).WithMetadata(new TracerRequestGuardMetadata());
 app.MapPost("/api/tracer/get", async (TracerRequest request, GetTracerUseCase useCase, CancellationToken cancellationToken) =>
 {
 	if (string.IsNullOrWhiteSpace(request.Url) || request.Url.Length > 2048)
@@ -74,7 +85,13 @@ app.MapPost("/api/tracer/get", async (TracerRequest request, GetTracerUseCase us
 	if (result.Outbound is null)
 		return Results.BadRequest(new { error = result.Error });
 	if (!result.Outbound.Succeeded && result.Outbound.Failure != OutboundFailure.PolicyRejected)
-		return Results.Json(new { error = result.Error, failure = result.Outbound.Failure.ToString() }, statusCode: result.Outbound.Failure switch
+		return Results.Json(new
+		{
+			failure = result.Outbound.Failure.ToString(), statusCode = result.Outbound.StatusCode,
+			elapsedMilliseconds = result.Outbound.Elapsed.TotalMilliseconds, headers = result.Outbound.Headers,
+			body = System.Text.Encoding.UTF8.GetString(result.Outbound.Body.Span), persistenceVerified = result.PersistenceVerified,
+			error = result.Error, requestSent = result.Outbound.DispatchStarted, historySaved = result.HistorySaved,
+		}, statusCode: result.Outbound.Failure switch
 		{
 			OutboundFailure.Timeout => StatusCodes.Status504GatewayTimeout,
 			OutboundFailure.Cancelled => 499,
@@ -97,7 +114,8 @@ app.MapPost("/api/tracer/get", async (TracerRequest request, GetTracerUseCase us
 		body = System.Text.Encoding.UTF8.GetString(result.Outbound.Body.Span),
 		persistenceVerified = result.PersistenceVerified,
 		error = result.Error,
-		requestSent = result.Outbound.Failure != OutboundFailure.PolicyRejected,
+		requestSent = result.Outbound.DispatchStarted,
+		historySaved = result.HistorySaved,
 	}, statusCode: httpStatus);
 }).WithMetadata(new TracerRequestGuardMetadata());
 
@@ -113,6 +131,19 @@ static bool IsValidJson(string body)
 		return false;
 	}
 }
+
+static object ToHistoryDto(RequestHistorySnapshot item) => new
+{
+	id = item.Id, createdAt = item.CreatedAt, method = item.Method, url = item.Url,
+	redactedQueryParameters = item.RedactedQueryParameters,
+	headers = item.Headers.Select(header => new
+	{
+		name = header.Key, value = item.RedactedHeaders.Contains(header.Key, StringComparer.OrdinalIgnoreCase) ? string.Empty : header.Value,
+		redacted = item.RedactedHeaders.Contains(header.Key, StringComparer.OrdinalIgnoreCase),
+	}),
+	redactedHeaders = item.RedactedHeaders, body = item.Body, failure = item.Failure,
+	statusCode = item.StatusCode, elapsedMilliseconds = item.ElapsedMilliseconds,
+};
 
 app.Run();
 

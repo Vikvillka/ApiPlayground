@@ -16,7 +16,8 @@ public sealed record OutboundResult(
     TimeSpan Elapsed,
     IReadOnlyDictionary<string, IReadOnlyList<string>> Headers,
     ReadOnlyMemory<byte> Body,
-    string? Diagnostic = null)
+    string? Diagnostic = null,
+    bool DispatchStarted = false)
 {
     public bool Succeeded => Failure == OutboundFailure.None;
 }

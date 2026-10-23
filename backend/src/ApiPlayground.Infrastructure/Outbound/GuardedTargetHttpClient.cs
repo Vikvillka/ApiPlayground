@@ -102,7 +102,7 @@ public sealed class GuardedTargetHttpClient : IOutboundRequestExecutor
                     {
                         return await _connect(new IPEndPoint(pinnedAddress, context.DnsEndPoint.Port), linkedConnectDeadline.Token).ConfigureAwait(false);
                     }
-                    catch (OperationCanceledException) when (connectDeadline.IsCancellationRequested && !deadline.IsCancellationRequested && !cancellationToken.IsCancellationRequested)
+                    catch (OperationCanceledException) when (!deadline.IsCancellationRequested && !cancellationToken.IsCancellationRequested)
                     {
                         connectionDeadlineExpired = true;
                         throw new TimeoutException("The outbound connection deadline expired.");
@@ -114,15 +114,18 @@ public sealed class GuardedTargetHttpClient : IOutboundRequestExecutor
             return Failed(OutboundFailure.PolicyRejected, stopwatch, "A request header or content type is invalid.");
         using var message = createdMessage!;
 
+        var dispatchStarted = false;
         try
         {
             using var linkedDeadline = CancellationTokenSource.CreateLinkedTokenSource(deadline.Token, cancellationToken);
+            // Crossing this boundary makes the attempt History-eligible; it does not prove remote receipt.
+            dispatchStarted = true;
             using var response = await client.SendAsync(message, HttpCompletionOption.ResponseHeadersRead, linkedDeadline.Token).ConfigureAwait(false);
             var headers = response.Headers.Concat(response.Content.Headers)
                 .GroupBy(pair => pair.Key, StringComparer.OrdinalIgnoreCase)
                 .ToDictionary(group => group.Key, group => (IReadOnlyList<string>)group.SelectMany(pair => pair.Value).ToArray(), StringComparer.OrdinalIgnoreCase);
             if (response.Content.Headers.ContentLength is long contentLength && contentLength > OutboundPolicy.MaximumResponseBytes)
-                return Failed(OutboundFailure.ResponseTooLarge, stopwatch, "The response exceeds the configured body limit.", (int)response.StatusCode, headers);
+                return Failed(OutboundFailure.ResponseTooLarge, stopwatch, "The response exceeds the configured body limit.", (int)response.StatusCode, headers, dispatchStarted: true);
 
             await using var stream = await response.Content.ReadAsStreamAsync(linkedDeadline.Token).ConfigureAwait(false);
             using var body = new MemoryStream();
@@ -133,27 +136,31 @@ public sealed class GuardedTargetHttpClient : IOutboundRequestExecutor
                 if (read == 0)
                     break;
                 if (body.Length + read > OutboundPolicy.MaximumResponseBytes)
-                    return Failed(OutboundFailure.ResponseTooLarge, stopwatch, "The response exceeds the configured body limit.", (int)response.StatusCode, headers);
+                    return Failed(OutboundFailure.ResponseTooLarge, stopwatch, "The response exceeds the configured body limit.", (int)response.StatusCode, headers, dispatchStarted: true);
                 await body.WriteAsync(buffer.AsMemory(0, read), linkedDeadline.Token).ConfigureAwait(false);
             }
 
             stopwatch.Stop();
             return new OutboundResult(OutboundFailure.None, (int)response.StatusCode, stopwatch.Elapsed,
-                new ReadOnlyDictionary<string, IReadOnlyList<string>>(headers), body.ToArray());
+                new ReadOnlyDictionary<string, IReadOnlyList<string>>(headers), body.ToArray(), DispatchStarted: true);
         }
         catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
         {
-            return Failed(OutboundFailure.Cancelled, stopwatch, "The request was cancelled.");
+            return Failed(OutboundFailure.Cancelled, stopwatch, "The request was cancelled.", dispatchStarted: dispatchStarted);
+        }
+        catch (OperationCanceledException) when (connectionDeadlineExpired)
+        {
+            return Failed(OutboundFailure.Timeout, stopwatch, "The outbound connection deadline expired.", dispatchStarted: dispatchStarted);
         }
         catch (OperationCanceledException)
         {
-            return Failed(OutboundFailure.Timeout, stopwatch, "The total request deadline expired.");
+            return Failed(OutboundFailure.Timeout, stopwatch, "The total request deadline expired.", dispatchStarted: dispatchStarted);
         }
-        catch (Exception ex) when (ex is HttpRequestException or SocketException or IOException or InvalidOperationException)
+        catch (Exception ex) when (ex is HttpRequestException or SocketException or IOException or InvalidOperationException or TimeoutException)
         {
-            if (connectionDeadlineExpired)
-                return Failed(OutboundFailure.Timeout, stopwatch, "The outbound connection deadline expired.");
-            return Failed(OutboundFailure.TransportFailure, stopwatch, "The outbound request failed: " + ex.GetType().Name);
+            if (connectionDeadlineExpired || ex is TimeoutException)
+                return Failed(OutboundFailure.Timeout, stopwatch, "The outbound connection deadline expired.", dispatchStarted: dispatchStarted);
+            return Failed(OutboundFailure.TransportFailure, stopwatch, "The outbound request failed: " + ex.GetType().Name, dispatchStarted: dispatchStarted);
         }
     }
 
@@ -251,11 +258,12 @@ public sealed class GuardedTargetHttpClient : IOutboundRequestExecutor
         Stopwatch stopwatch,
         string diagnostic,
         int? statusCode = null,
-        IReadOnlyDictionary<string, IReadOnlyList<string>>? headers = null)
+        IReadOnlyDictionary<string, IReadOnlyList<string>>? headers = null,
+        bool dispatchStarted = false)
     {
         stopwatch.Stop();
         return new OutboundResult(failure, statusCode, stopwatch.Elapsed,
             headers ?? new ReadOnlyDictionary<string, IReadOnlyList<string>>(new Dictionary<string, IReadOnlyList<string>>()),
-            ReadOnlyMemory<byte>.Empty, diagnostic);
+            ReadOnlyMemory<byte>.Empty, diagnostic, dispatchStarted);
     }
 }

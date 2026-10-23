@@ -13,6 +13,7 @@ public static class DependencyInjection
         services.AddDbContext<PlatformDbContext>(options =>
             options.UseNpgsql(connectionString, postgres =>
                 postgres.MigrationsAssembly(typeof(DependencyInjection).Assembly.FullName)));
+            services.AddScoped<IRequestHistoryStore, PostgresRequestHistoryStore>();
 
         return services;
     }

@@ -8,6 +8,7 @@ namespace ApiPlayground.Tests;
 public sealed class MigrationContinuityTests
 {
     private const string InitialMigrationId = "20261018000000_InitialPlatformBaseline";
+    private const string HistoryMigrationId = "20261023000000_RequestHistory";
     private readonly string _adminConnectionString;
 
     public MigrationContinuityTests()
@@ -56,7 +57,12 @@ public sealed class MigrationContinuityTests
             await MigrateAsync(connectionString);
             var migrationIds = await ReadMigrationIdsAsync(connectionString);
 
-            Assert.Equal([InitialMigrationId], migrationIds);
+            Assert.Equal([InitialMigrationId, HistoryMigrationId], migrationIds);
+            await using var connection = new NpgsqlConnection(connectionString);
+            await connection.OpenAsync();
+            await using var command = connection.CreateCommand();
+            command.CommandText = "SELECT count(*) FROM information_schema.tables WHERE table_schema = 'public' AND table_name = 'request_history'";
+            Assert.Equal(1L, await command.ExecuteScalarAsync());
         });
     }
 
@@ -68,7 +74,7 @@ public sealed class MigrationContinuityTests
             .Options;
         using var context = new ApiPlayground.Api.Data.PlatformDbContext(options);
 
-        Assert.Equal([InitialMigrationId], context.Database.GetMigrations());
+        Assert.Equal([InitialMigrationId, HistoryMigrationId], context.Database.GetMigrations());
     }
 
     [Fact]
@@ -89,7 +95,7 @@ public sealed class MigrationContinuityTests
             await MigrateAsync(connectionString);
             var migrationIds = await ReadMigrationIdsAsync(connectionString);
 
-            Assert.Equal([InitialMigrationId], migrationIds);
+            Assert.Equal([InitialMigrationId, HistoryMigrationId], migrationIds);
         });
     }
 
@@ -123,7 +129,7 @@ public sealed class MigrationContinuityTests
                     "ef database update --project src/ApiPlayground.Infrastructure/ApiPlayground.Infrastructure.csproj --startup-project src/ApiPlayground.Api/ApiPlayground.Api.csproj",
                     environment);
                 var initialMigrationIds = await ReadMigrationIdsAsync(connectionString);
-                Assert.Equal([InitialMigrationId], initialMigrationIds);
+                Assert.Equal([InitialMigrationId, HistoryMigrationId], initialMigrationIds);
                 AddTemporaryMigrationModel(copiedBackend);
                 await RunDotnetAsync(
                     copiedBackend,
@@ -155,9 +161,10 @@ public sealed class MigrationContinuityTests
                     environment);
 
                 var migrationIds = await ReadMigrationIdsAsync(connectionString);
-                Assert.Equal(2, migrationIds.Length);
+                Assert.Equal(3, migrationIds.Length);
                 Assert.Equal(InitialMigrationId, migrationIds[0]);
-                Assert.Equal(generatedId, migrationIds[1]);
+                Assert.Equal(HistoryMigrationId, migrationIds[1]);
+                Assert.Equal(generatedId, migrationIds[2]);
             }
             finally
             {
@@ -289,8 +296,8 @@ public sealed class MigrationContinuityTests
         var contextPath = Path.Combine(copiedBackend, "src", "ApiPlayground.Infrastructure", "Data", "PlatformDbContext.cs");
         var context = File.ReadAllText(contextPath);
         var normalizedContext = context.Replace("\r\n", "\n", StringComparison.Ordinal);
-        const string original = "DbContext(options)\n{\n}";
-        const string replacement = "DbContext(options)\n{\n    protected override void OnModelCreating(ModelBuilder modelBuilder)\n    {\n        modelBuilder.Entity<Ticket10TemporaryMarker>(entity =>\n        {\n            entity.ToTable(\"ticket_10_temporary_marker\");\n            entity.HasKey(marker => marker.Id);\n        });\n    }\n}";
+        const string original = "\t\tvar history = modelBuilder.Entity<RequestHistoryEntity>();";
+        const string replacement = original + "\n\t\tmodelBuilder.Entity<Ticket10TemporaryMarker>(entity =>\n\t\t{\n\t\t\tentity.ToTable(\"ticket_10_temporary_marker\");\n\t\t\tentity.HasKey(marker => marker.Id);\n\t\t});";
 
         Assert.Contains(original, normalizedContext, StringComparison.Ordinal);
         var markerPath = Path.Combine(copiedBackend, "src", "ApiPlayground.Infrastructure", "Data", "Ticket10TemporaryMarker.cs");

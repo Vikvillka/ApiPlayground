@@ -13,6 +13,95 @@ describe("request workspace", () => {
     expect(screen.getByText("Enter a URL to send a request.")).toBeInTheDocument();
   });
 
+  it("links request tabs to their panels and prevents History loading during a send", async () => {
+    let completeSend!: (response: Response) => void;
+    const fetchMock = vi.fn()
+      .mockImplementationOnce(() => new Promise<Response>(resolve => { completeSend = resolve; }))
+      .mockResolvedValueOnce(new Response(JSON.stringify([{
+        id: "history-1", createdAt: "2026-10-23T12:00:00Z", method: "GET", url: "https://example.test/previous",
+        redactedQueryParameters: [], headers: [], redactedHeaders: [], body: null, failure: "None", statusCode: 200, elapsedMilliseconds: 2,
+      }]), { status: 200, headers: { "Content-Type": "application/json" } }));
+    vi.stubGlobal("fetch", fetchMock);
+    render(<App />);
+
+    const selectedTab = screen.getByRole("tab", { name: "Params" });
+    expect(document.getElementById(selectedTab.getAttribute("aria-controls")!)).toHaveAttribute("aria-labelledby", selectedTab.id);
+
+    fireEvent.change(screen.getByLabelText("Request URL"), { target: { value: "https://example.test/current" } });
+    fireEvent.click(screen.getByRole("button", { name: "Send" }));
+    fireEvent.click(screen.getByRole("button", { name: "Show History" }));
+    const item = await screen.findByRole("button", { name: "Load GET /previous" });
+    expect(item).toBeDisabled();
+
+    completeSend(new Response(JSON.stringify({
+      failure: "None", statusCode: 200, elapsedMilliseconds: 1, headers: {}, body: "current",
+      persistenceVerified: true, error: null, requestSent: true, historySaved: true,
+    }), { status: 200, headers: { "Content-Type": "application/json" } }));
+    expect(await screen.findByText("current")).toBeInTheDocument();
+  });
+
+  it("loads History items without sending and clears the previous response", async () => {
+    const fetchMock = vi.fn()
+      .mockResolvedValueOnce(new Response(JSON.stringify({
+        failure: "None", statusCode: 200, elapsedMilliseconds: 1, headers: {}, body: "prior",
+        persistenceVerified: true, error: null, requestSent: true, historySaved: true,
+      }), { status: 200, headers: { "Content-Type": "application/json" } }))
+      .mockResolvedValueOnce(new Response(JSON.stringify([{
+        id: "history-1", createdAt: "2026-10-23T12:00:00Z", method: "POST",
+        url: "https://example.test/path?tag=one&access_token=secret",
+        redactedQueryParameters: ["access_token"],
+        headers: [{ name: "Authorization", value: "", redacted: true }, { name: "X-Visible", value: "shown", redacted: false }],
+        redactedHeaders: ["Authorization"], body: "{\"saved\":true}", failure: "None", statusCode: 201, elapsedMilliseconds: 2,
+      }]), { status: 200, headers: { "Content-Type": "application/json" } }))
+      .mockResolvedValueOnce(new Response(JSON.stringify({
+        failure: "None", statusCode: 201, elapsedMilliseconds: 3, headers: {}, body: "replayed",
+        persistenceVerified: true, error: null, requestSent: true, historySaved: true,
+      }), { status: 200, headers: { "Content-Type": "application/json" } }));
+    vi.stubGlobal("fetch", fetchMock);
+    render(<App />);
+    fireEvent.change(screen.getByLabelText("Request URL"), { target: { value: "https://example.test/first" } });
+    fireEvent.click(screen.getByRole("button", { name: "Send" }));
+    await waitFor(() => expect(screen.getByText("prior")).toBeInTheDocument());
+
+    fireEvent.click(screen.getByRole("button", { name: "Show History" }));
+    expect(await screen.findByRole("button", { name: "Load POST /path" })).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Load POST /path" }));
+
+    expect(screen.getByLabelText("Request URL")).toHaveValue("https://example.test/path");
+    expect(screen.getByLabelText("Request method")).toHaveValue("POST");
+    expect(screen.getAllByLabelText("Parameter key").map(input => (input as HTMLInputElement).value)).toEqual(["tag", "access_token"]);
+    expect(screen.getAllByLabelText("Parameter value").map(input => (input as HTMLInputElement).value)).toEqual(["one", ""]);
+    expect(screen.getAllByLabelText("Enabled")[1]).toBeDisabled();
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    expect(fetchMock.mock.calls[1][0]).toBe("/api/tracer/history");
+    expect(screen.queryByText("prior")).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("tab", { name: "Headers" }));
+    expect(screen.getAllByLabelText("Header value")[0]).not.toBeDisabled();
+    expect(screen.getAllByLabelText("Header value")[0]).toHaveAttribute("placeholder", "Value not saved — enter it again");
+    expect(screen.getAllByLabelText("Header value")[1]).toHaveValue("shown");
+    fireEvent.click(screen.getByRole("button", { name: "Send" }));
+    expect(await screen.findByText("replayed")).toBeInTheDocument();
+    expect(fetchMock).toHaveBeenCalledTimes(4);
+    expect(fetchMock.mock.calls[2][0]).toBe("/api/tracer/get");
+    const replayed = JSON.parse(fetchMock.mock.calls[2][1].body as string);
+    expect(fetchMock.mock.calls[3][0]).toBe("/api/tracer/history");
+    expect(replayed.url).toBe("https://example.test/path?tag=one");
+  });
+
+  it("reports that a dispatched request's History entry could not be saved", async () => {
+    const fetchMock = vi.fn().mockResolvedValue(new Response(JSON.stringify({
+      failure: "None", statusCode: 200, elapsedMilliseconds: 1, headers: {}, body: "ok",
+      persistenceVerified: true, error: null, requestSent: true, historySaved: false,
+    }), { status: 200, headers: { "Content-Type": "application/json" } }));
+    vi.stubGlobal("fetch", fetchMock);
+    render(<App />);
+    fireEvent.change(screen.getByLabelText("Request URL"), { target: { value: "https://example.test" } });
+    fireEvent.click(screen.getByRole("button", { name: "Send" }));
+    expect(await screen.findByText("The request was sent, but its History entry was not saved.")).toBeInTheDocument();
+    expect(screen.getByText("ok")).toBeInTheDocument();
+  });
+
   it("shows an observed response from the tracer API", async () => {
     const fetchMock = vi.fn().mockResolvedValue(new Response(JSON.stringify({
       failure: "None",

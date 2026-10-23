@@ -105,6 +105,7 @@ public sealed class OutboundSafetyTests
         var result = await executor.ExecuteAsync(new OutboundRequest(new Uri("http://ipv6-only.example.test/"), "GET"));
 
         Assert.Equal(OutboundFailure.TransportFailure, result.Failure);
+        Assert.True(result.DispatchStarted);
         Assert.Equal(AddressFamily.InterNetworkV6, connectedEndpoint?.AddressFamily);
         Assert.Equal(IPAddress.Parse("2606:4700:4700::1111"), connectedEndpoint?.Address);
     }
@@ -135,6 +136,7 @@ public sealed class OutboundSafetyTests
         var result = await executor.ExecuteAsync(new OutboundRequest(new Uri(server.BaseAddress, "/connect-timeout"), "GET"));
 
         Assert.Equal(OutboundFailure.Timeout, result.Failure);
+        Assert.True(result.DispatchStarted);
         Assert.InRange(stopwatch.Elapsed, TimeSpan.FromSeconds(4), TimeSpan.FromSeconds(8));
     }
 
@@ -147,6 +149,7 @@ public sealed class OutboundSafetyTests
         var result = await executor.ExecuteAsync(new OutboundRequest(targetUri, "GET"));
 
         Assert.True(result.Succeeded, result.Diagnostic);
+        Assert.True(result.DispatchStarted);
         Assert.Equal("controlled", Encoding.UTF8.GetString(result.Body.Span));
         var wrongPort = await executor.ExecuteAsync(new OutboundRequest(new Uri($"http://echo.example.test:{server.BaseAddress.Port + 1}/"), "GET"));
         Assert.Equal(OutboundFailure.PolicyRejected, wrongPort.Failure);
@@ -203,6 +206,7 @@ public sealed class OutboundSafetyTests
         var result = await executor.ExecuteAsync(new OutboundRequest(new Uri($"http://large.example.test:{server.BaseAddress.Port}/large"), "GET"));
 
         Assert.Equal(OutboundFailure.ResponseTooLarge, result.Failure);
+        Assert.True(result.DispatchStarted);
     }
 
     [Fact]
@@ -218,6 +222,7 @@ public sealed class OutboundSafetyTests
         var result = await executor.ExecuteAsync(new OutboundRequest(new Uri($"http://slow.example.test:{server.BaseAddress.Port}/slow"), "GET"));
 
         Assert.Equal(OutboundFailure.Timeout, result.Failure);
+        Assert.True(result.DispatchStarted);
     }
 
     [Fact]
@@ -243,6 +248,7 @@ public sealed class OutboundSafetyTests
         var result = await executor.ExecuteAsync(new OutboundRequest(new Uri($"http://cancel.example.test:{server.BaseAddress.Port}/cancel"), "GET"), cancellation.Token);
 
         Assert.Equal(OutboundFailure.Cancelled, result.Failure);
+        Assert.True(result.DispatchStarted);
     }
 
     [Fact]

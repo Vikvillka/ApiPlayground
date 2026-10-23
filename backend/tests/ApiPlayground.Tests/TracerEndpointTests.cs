@@ -14,11 +14,11 @@ namespace ApiPlayground.Tests;
 
 public sealed class TracerEndpointTests
 {
-    private static HttpRequestMessage CreateAllowedRequest(string url)
+    private static HttpRequestMessage CreateAllowedRequest(string url, HttpMethod? method = null, string? path = null)
     {
-        var request = new HttpRequestMessage(HttpMethod.Post, "/api/tracer/get")
+        var request = new HttpRequestMessage(method ?? HttpMethod.Post, path ?? (method == HttpMethod.Get ? "/api/tracer/history" : "/api/tracer/get"))
         {
-            Content = JsonContent.Create(new { url }),
+            Content = method == HttpMethod.Get ? null : JsonContent.Create(new { url }),
         };
         request.Headers.Host = "localhost:5000";
         request.Headers.Add("Origin", "http://127.0.0.1:5173");
@@ -193,9 +193,11 @@ public sealed class TracerEndpointTests
                 (_, _) => Task.FromResult(new[] { IPAddress.Loopback })));
             services.RemoveAll<ITracerPersistenceSmokeCheck>();
             services.AddSingleton<ITracerPersistenceSmokeCheck>(new SuccessfulPersistenceCheck());
+            services.RemoveAll<IRequestHistoryStore>();
+            services.AddSingleton<IRequestHistoryStore>(new InMemoryHistoryStore());
         }));
         await using (factory)
-        using (var request = CreateAllowedRequest(target.BaseAddress.ToString()))
+        using (var request = CreateAllowedRequest(target.BaseAddress + "?tag=ok&access_token=secret"))
         using (var response = await factory.CreateClient().SendAsync(request))
         {
             Assert.Equal(HttpStatusCode.OK, response.StatusCode);
@@ -206,6 +208,13 @@ public sealed class TracerEndpointTests
             Assert.Equal("controlled tracer response", payload.Body);
             Assert.True(payload.PersistenceVerified);
             Assert.True(payload.RequestSent);
+            using var historyRequest = CreateAllowedRequest(target.BaseAddress.ToString(), HttpMethod.Get, "/api/tracer/history");
+            using var historyResponse = await factory.CreateClient().SendAsync(historyRequest);
+            var history = await historyResponse.Content.ReadFromJsonAsync<HistoryDto[]>();
+            Assert.NotNull(history);
+            var recorded = Assert.Single(history!);
+            Assert.Contains("access_token=", recorded.Url, StringComparison.Ordinal);
+            Assert.DoesNotContain("secret", recorded.Url, StringComparison.Ordinal);
         }
     }
 
@@ -338,6 +347,8 @@ public sealed class TracerEndpointTests
                 (_, _) => Task.FromResult(new[] { IPAddress.Loopback })));
             services.RemoveAll<ITracerPersistenceSmokeCheck>();
             services.AddSingleton<ITracerPersistenceSmokeCheck>(new SuccessfulPersistenceCheck());
+            services.RemoveAll<IRequestHistoryStore>();
+            services.AddSingleton<IRequestHistoryStore>(new InMemoryHistoryStore());
         }));
 
     [Fact]
@@ -351,6 +362,8 @@ public sealed class TracerEndpointTests
                 new Dictionary<string, IReadOnlyList<string>>(), ReadOnlyMemory<byte>.Empty)));
             services.RemoveAll<ITracerPersistenceSmokeCheck>();
             services.AddSingleton<ITracerPersistenceSmokeCheck>(new SuccessfulPersistenceCheck());
+            services.RemoveAll<IRequestHistoryStore>();
+            services.AddSingleton<IRequestHistoryStore>(new InMemoryHistoryStore());
         }));
         await using (factory)
         using (var request = CreateAllowedRequest("http://127.0.0.1/"))
@@ -372,6 +385,8 @@ public sealed class TracerEndpointTests
             services.AddSingleton<IOutboundRequestExecutor>(executor);
             services.RemoveAll<ITracerPersistenceSmokeCheck>();
             services.AddSingleton<ITracerPersistenceSmokeCheck>(new SuccessfulPersistenceCheck());
+            services.RemoveAll<IRequestHistoryStore>();
+            services.AddSingleton<IRequestHistoryStore>(new InMemoryHistoryStore());
         }));
 
     private sealed class RecordingExecutor : IOutboundRequestExecutor
@@ -396,6 +411,22 @@ public sealed class TracerEndpointTests
         public Task<bool> VerifyRoundTripAsync(CancellationToken cancellationToken = default) => Task.FromResult(true);
     }
 
+    private sealed class InMemoryHistoryStore : IRequestHistoryStore
+    {
+        private readonly List<RequestHistorySnapshot> _items = [];
+        public Task SaveAsync(RequestHistorySnapshot snapshot, CancellationToken cancellationToken = default)
+        {
+            _items.Add(snapshot);
+            return Task.CompletedTask;
+        }
+        public Task<IReadOnlyList<RequestHistorySnapshot>> ListAsync(CancellationToken cancellationToken = default) =>
+            Task.FromResult<IReadOnlyList<RequestHistorySnapshot>>(_items.OrderByDescending(item => item.CreatedAt).ThenByDescending(item => item.Id).ToArray());
+        public Task<RequestHistorySnapshot?> FindAsync(Guid id, CancellationToken cancellationToken = default) =>
+            Task.FromResult(_items.SingleOrDefault(item => item.Id == id));
+    }
+
     private sealed record TracerResponse(string Failure, int? StatusCode, double ElapsedMilliseconds,
         Dictionary<string, string[]> Headers, string Body, bool PersistenceVerified, string? Error, bool RequestSent);
+
+    private sealed record HistoryDto(Guid Id, string Url, string[] RedactedQueryParameters);
 }

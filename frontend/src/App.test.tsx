@@ -29,7 +29,7 @@ describe("request workspace", () => {
 
     fireEvent.change(screen.getByLabelText("Request URL"), { target: { value: "https://example.test/current" } });
     fireEvent.click(screen.getByRole("button", { name: "Send" }));
-    fireEvent.click(screen.getByRole("button", { name: "Show History" }));
+    fireEvent.click(screen.getByRole("button", { name: "Show History & Collections" }));
     const item = await screen.findByRole("button", { name: "Load GET /previous" });
     expect(item).toBeDisabled();
 
@@ -53,17 +53,24 @@ describe("request workspace", () => {
         headers: [{ name: "Authorization", value: "", redacted: true }, { name: "X-Visible", value: "shown", redacted: false }],
         redactedHeaders: ["Authorization"], body: "{\"saved\":true}", failure: "None", statusCode: 201, elapsedMilliseconds: 2,
       }]), { status: 200, headers: { "Content-Type": "application/json" } }))
+      .mockResolvedValueOnce(new Response("[]", { status: 200, headers: { "Content-Type": "application/json" } }))
       .mockResolvedValueOnce(new Response(JSON.stringify({
         failure: "None", statusCode: 201, elapsedMilliseconds: 3, headers: {}, body: "replayed",
         persistenceVerified: true, error: null, requestSent: true, historySaved: true,
-      }), { status: 200, headers: { "Content-Type": "application/json" } }));
+      }), { status: 200, headers: { "Content-Type": "application/json" } }))
+      .mockResolvedValueOnce(new Response(JSON.stringify([{
+        id: "history-2", createdAt: "2026-10-23T12:01:00Z", method: "POST",
+        url: "https://example.test/path", redactedQueryParameters: [], headers: [], redactedHeaders: [],
+        body: null, failure: "None", statusCode: 201, elapsedMilliseconds: 3,
+      }]), { status: 200, headers: { "Content-Type": "application/json" } }))
+      .mockResolvedValueOnce(new Response("[]", { status: 200, headers: { "Content-Type": "application/json" } }));
     vi.stubGlobal("fetch", fetchMock);
     render(<App />);
     fireEvent.change(screen.getByLabelText("Request URL"), { target: { value: "https://example.test/first" } });
     fireEvent.click(screen.getByRole("button", { name: "Send" }));
     await waitFor(() => expect(screen.getByText("prior")).toBeInTheDocument());
 
-    fireEvent.click(screen.getByRole("button", { name: "Show History" }));
+    fireEvent.click(screen.getByRole("button", { name: "Show History & Collections" }));
     expect(await screen.findByRole("button", { name: "Load POST /path" })).toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "Load POST /path" }));
 
@@ -72,8 +79,10 @@ describe("request workspace", () => {
     expect(screen.getAllByLabelText("Parameter key").map(input => (input as HTMLInputElement).value)).toEqual(["tag", "access_token"]);
     expect(screen.getAllByLabelText("Parameter value").map(input => (input as HTMLInputElement).value)).toEqual(["one", ""]);
     expect(screen.getAllByLabelText("Enabled")[1]).toBeDisabled();
-    expect(fetchMock).toHaveBeenCalledTimes(2);
+    expect(fetchMock).toHaveBeenCalledTimes(3);
+    expect(fetchMock.mock.calls[0][0]).toBe("/api/tracer/get");
     expect(fetchMock.mock.calls[1][0]).toBe("/api/tracer/history");
+    expect(fetchMock.mock.calls[2][0]).toBe("/api/tracer/collections");
     expect(screen.queryByText("prior")).not.toBeInTheDocument();
 
     fireEvent.click(screen.getByRole("tab", { name: "Headers" }));
@@ -82,10 +91,10 @@ describe("request workspace", () => {
     expect(screen.getAllByLabelText("Header value")[1]).toHaveValue("shown");
     fireEvent.click(screen.getByRole("button", { name: "Send" }));
     expect(await screen.findByText("replayed")).toBeInTheDocument();
-    expect(fetchMock).toHaveBeenCalledTimes(4);
-    expect(fetchMock.mock.calls[2][0]).toBe("/api/tracer/get");
-    const replayed = JSON.parse(fetchMock.mock.calls[2][1].body as string);
-    expect(fetchMock.mock.calls[3][0]).toBe("/api/tracer/history");
+    expect(fetchMock).toHaveBeenCalledTimes(5);
+    expect(fetchMock.mock.calls[3][0]).toBe("/api/tracer/get");
+    const replayed = JSON.parse(fetchMock.mock.calls[3][1].body as string);
+    expect(fetchMock.mock.calls[4][0]).toBe("/api/tracer/history");
     expect(replayed.url).toBe("https://example.test/path?tag=one");
   });
 
@@ -100,6 +109,140 @@ describe("request workspace", () => {
     fireEvent.click(screen.getByRole("button", { name: "Send" }));
     expect(await screen.findByText("The request was sent, but its History entry was not saved.")).toBeInTheDocument();
     expect(screen.getByText("ok")).toBeInTheDocument();
+  });
+
+  it("saves explicitly to a new collection and preserves the editor without sending", async () => {
+    const fetchMock = vi.fn()
+      .mockResolvedValueOnce(new Response("[]", { status: 200, headers: { "Content-Type": "application/json" } }))
+      .mockResolvedValueOnce(new Response(JSON.stringify({
+        id: "saved-1", createdAt: "2026-10-25T12:00:00Z", collectionId: "collection-1", collectionName: "Team",
+        title: "PATCH /items", method: "PATCH", url: "https://example.test/items?keep=yes",
+        headers: [{ name: "Authorization", value: "", redacted: true }, { name: "X-Keep", value: "visible", redacted: false }],
+        redactedHeaders: ["Authorization"], body: "{\"ok\":true}",
+      }), { status: 201, headers: { "Content-Type": "application/json" } }))
+      .mockResolvedValueOnce(new Response(JSON.stringify([{
+        id: "collection-1", name: "Team", requests: [{
+          id: "saved-1", createdAt: "2026-10-25T12:00:00Z", collectionId: "collection-1", collectionName: "Team",
+          title: "PATCH /items", method: "PATCH", url: "https://example.test/items?keep=yes",
+          headers: [{ name: "Authorization", value: "", redacted: true }, { name: "X-Keep", value: "visible", redacted: false }],
+          redactedHeaders: ["Authorization"], body: "{\"ok\":true}",
+        }],
+      }]), { status: 200, headers: { "Content-Type": "application/json" } }))
+      .mockResolvedValueOnce(new Response("[]", { status: 200, headers: { "Content-Type": "application/json" } }))
+      .mockResolvedValueOnce(new Response(JSON.stringify([{
+        id: "collection-1", name: "Team", requests: [{
+          id: "saved-1", createdAt: "2026-10-25T12:00:00Z", collectionId: "collection-1", collectionName: "Team",
+          title: "PATCH /items", method: "PATCH", url: "https://example.test/items?keep=yes",
+          headers: [{ name: "Authorization", value: "", redacted: true }, { name: "X-Keep", value: "visible", redacted: false }],
+          redactedHeaders: ["Authorization"], body: "{\"ok\":true}",
+        }],
+      }]), { status: 200, headers: { "Content-Type": "application/json" } }));
+    vi.stubGlobal("fetch", fetchMock);
+    render(<App />);
+    fireEvent.change(screen.getByLabelText("Request URL"), { target: { value: "https://example.test/items?keep=yes" } });
+    fireEvent.change(screen.getByLabelText("Request method"), { target: { value: "PATCH" } });
+    fireEvent.change(screen.getByLabelText("Parameter key"), { target: { value: "added" } });
+    fireEvent.change(screen.getByLabelText("Parameter value"), { target: { value: "value" } });
+    fireEvent.click(screen.getByRole("tab", { name: "Headers" }));
+    fireEvent.change(screen.getByLabelText("Header key"), { target: { value: "Authorization" } });
+    fireEvent.change(screen.getByLabelText("Header value"), { target: { value: "Bearer private" } });
+    fireEvent.click(screen.getByRole("button", { name: "Save to collection" }));
+
+    const dialog = await screen.findByRole("dialog", { name: "Save to collection" });
+    expect(screen.getByLabelText("Request title")).toHaveValue("PATCH /items");
+    expect(screen.getByLabelText("Request title")).toHaveFocus();
+    fireEvent.keyDown(screen.getByLabelText("Request title"), { key: "Tab", shiftKey: true });
+    expect(within(dialog).getByRole("button", { name: "Cancel" })).toHaveFocus();
+    fireEvent.keyDown(within(dialog).getByRole("button", { name: "Cancel" }), { key: "Tab" });
+    expect(screen.getByLabelText("Request title")).toHaveFocus();
+    fireEvent.keyDown(screen.getByLabelText("Request title"), { key: "Escape" });
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+    await waitFor(() => expect(screen.getByRole("button", { name: "Save to collection" })).toHaveFocus());
+    fireEvent.click(screen.getByRole("button", { name: "Save to collection" }));
+    const reopenedDialog = await screen.findByRole("dialog", { name: "Save to collection" });
+    expect(screen.getByLabelText("Request title")).toHaveValue("PATCH /items");
+    fireEvent.change(screen.getByLabelText("Request title"), { target: { value: "Update item" } });
+    fireEvent.change(screen.getByLabelText("New collection name"), { target: { value: "Team" } });
+    fireEvent.click(within(reopenedDialog).getByRole("button", { name: "Save request" }));
+
+    await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument());
+    expect(fetchMock).toHaveBeenCalledTimes(3);
+    expect(fetchMock.mock.calls[0][0]).toBe("/api/tracer/collections");
+    expect(fetchMock.mock.calls[1][0]).toBe("/api/tracer/collections/requests");
+    const saved = JSON.parse(fetchMock.mock.calls[1][1].body as string);
+    expect(saved).toMatchObject({ collectionId: null, newCollectionName: "Team", title: "Update item", method: "PATCH" });
+    expect(saved.headers).toEqual({ Authorization: "Bearer private" });
+    expect(fetchMock.mock.calls[2][0]).toBe("/api/tracer/collections");
+    expect(screen.getByLabelText("Request URL")).toHaveValue("https://example.test/items?keep=yes");
+    expect(screen.getByText("Request saved to Collections.")).toBeInTheDocument();
+    await waitFor(() => expect(screen.getByRole("button", { name: "Save to collection" })).toHaveFocus());
+
+    fireEvent.click(screen.getByRole("button", { name: "Show History & Collections" }));
+    expect(await screen.findByRole("button", { name: "Load saved PATCH PATCH /items" })).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Load saved PATCH PATCH /items" }));
+    expect(screen.getByLabelText("Request URL")).toHaveValue("https://example.test/items");
+    expect(screen.getByLabelText("Request method")).toHaveValue("PATCH");
+    expect(screen.queryByText("Request saved to Collections.")).not.toBeInTheDocument();
+    expect(fetchMock).toHaveBeenCalledTimes(5);
+    expect(fetchMock.mock.calls[3][0]).toBe("/api/tracer/history");
+    fireEvent.click(screen.getByRole("tab", { name: "Headers" }));
+    const requestPanel = screen.getByRole("tabpanel", { name: "Headers" });
+    expect(within(requestPanel).getAllByLabelText("Header value")[0]).toHaveValue("");
+    expect(within(requestPanel).getAllByLabelText("Header value")[0]).toHaveAttribute("placeholder", "Value not saved — enter it again");
+    expect(within(requestPanel).getAllByLabelText("Enabled")[0]).toBeDisabled();
+  });
+
+  it("keeps save dialog values and request editor intact after failure for retry", async () => {
+    const fetchMock = vi.fn()
+      .mockResolvedValueOnce(new Response("[]", { status: 200, headers: { "Content-Type": "application/json" } }))
+      .mockResolvedValueOnce(new Response(JSON.stringify({ error: "The request could not be saved. Your request is still available to retry." }), { status: 503, headers: { "Content-Type": "application/problem+json" } }))
+      .mockResolvedValueOnce(new Response(JSON.stringify({
+        id: "saved-2", createdAt: "2026-10-25T12:00:00Z", collectionId: "collection-2", collectionName: "Retry",
+        title: "GET /retry", method: "GET", url: "https://example.test/retry", headers: [], redactedHeaders: [], body: null,
+      }), { status: 201, headers: { "Content-Type": "application/json" } }))
+      .mockResolvedValueOnce(new Response(JSON.stringify([{ id: "collection-2", name: "Retry", requests: [] }]), { status: 200, headers: { "Content-Type": "application/json" } }));
+    vi.stubGlobal("fetch", fetchMock);
+    render(<App />);
+    fireEvent.change(screen.getByLabelText("Request URL"), { target: { value: "https://example.test/retry" } });
+    fireEvent.change(screen.getByLabelText("Parameter key"), { target: { value: "kept" } });
+    fireEvent.change(screen.getByLabelText("Parameter value"), { target: { value: "value" } });
+    fireEvent.click(screen.getByRole("button", { name: "Save to collection" }));
+    await screen.findByRole("dialog", { name: "Save to collection" });
+    fireEvent.change(screen.getByLabelText("Request title"), { target: { value: "Retry title" } });
+    fireEvent.change(screen.getByLabelText("New collection name"), { target: { value: "Retry" } });
+    fireEvent.click(screen.getByRole("button", { name: "Save request" }));
+    expect(await screen.findByRole("alert")).toHaveTextContent("still available to retry");
+    expect(screen.getByLabelText("Request title")).toHaveValue("Retry title");
+    expect(screen.getByLabelText("New collection name")).toHaveValue("Retry");
+    expect(screen.getByLabelText("Parameter key")).toHaveValue("kept");
+    expect(screen.getByLabelText("Parameter value")).toHaveValue("value");
+    fireEvent.click(screen.getByRole("button", { name: "Save request" }));
+    await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument());
+    expect(fetchMock).toHaveBeenCalledTimes(4);
+    expect(fetchMock.mock.calls[0][0]).toBe("/api/tracer/collections");
+    expect(fetchMock.mock.calls[1][0]).toBe("/api/tracer/collections/requests");
+    expect(fetchMock.mock.calls[2][0]).toBe("/api/tracer/collections/requests");
+    expect(fetchMock.mock.calls[1][1].body).toBe(fetchMock.mock.calls[2][1].body);
+  });
+
+  it("saves into an existing collection using the editable title", async () => {
+    const fetchMock = vi.fn()
+      .mockResolvedValueOnce(new Response("[]", { status: 200, headers: { "Content-Type": "application/json" } }))
+      .mockResolvedValueOnce(new Response(JSON.stringify([{ id: "collection-1", name: "Existing", requests: [] }]), { status: 200, headers: { "Content-Type": "application/json" } }))
+      .mockResolvedValueOnce(new Response(JSON.stringify({ id: "saved-3" }), { status: 201, headers: { "Content-Type": "application/json" } }))
+      .mockResolvedValueOnce(new Response(JSON.stringify([{ id: "collection-1", name: "Existing", requests: [] }]), { status: 200, headers: { "Content-Type": "application/json" } }));
+    vi.stubGlobal("fetch", fetchMock);
+    render(<App />);
+    fireEvent.click(screen.getByRole("button", { name: "Show History & Collections" }));
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(2));
+    fireEvent.change(screen.getByLabelText("Request URL"), { target: { value: "https://example.test/path" } });
+    fireEvent.click(screen.getByRole("button", { name: "Save to collection" }));
+    fireEvent.change(screen.getByLabelText("Request title"), { target: { value: "Custom title" } });
+    fireEvent.click(screen.getByRole("button", { name: "Save request" }));
+    await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument());
+    expect(JSON.parse(fetchMock.mock.calls[2][1].body as string)).toMatchObject({
+      collectionId: "collection-1", newCollectionName: null, title: "Custom title", url: "https://example.test/path",
+    });
   });
 
   it("shows an observed response from the tracer API", async () => {

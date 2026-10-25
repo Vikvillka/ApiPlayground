@@ -1,6 +1,6 @@
 import { platformName } from "./platform";
-import { useState, type FormEvent, type KeyboardEvent } from "react";
-import { getTracerHistory, sendTracerRequest, type HistoryItem, type TracerResponse } from "./tracer";
+import { useEffect, useRef, useState, type FormEvent, type KeyboardEvent } from "react";
+import { getTracerCollections, getTracerHistory, saveTracerRequest, sendTracerRequest, type HistoryItem, type RequestCollection, type SavedRequest, type TracerResponse } from "./tracer";
 import "./App.css";
 
 type RequestRow = { id: number; key: string; value: string; enabled: boolean; redacted?: boolean };
@@ -27,6 +27,18 @@ export function App() {
   const [historyLoading, setHistoryLoading] = useState(false);
   const [historyError, setHistoryError] = useState<string | null>(null);
   const [historyNotice, setHistoryNotice] = useState<string | null>(null);
+  const [collections, setCollections] = useState<RequestCollection[]>([]);
+  const [collectionsLoaded, setCollectionsLoaded] = useState(false);
+  const [collectionError, setCollectionError] = useState<string | null>(null);
+  const [saveOpen, setSaveOpen] = useState(false);
+  const [saveTitle, setSaveTitle] = useState("");
+  const [saveCollectionId, setSaveCollectionId] = useState("");
+  const [newCollectionName, setNewCollectionName] = useState("");
+  const [createCollection, setCreateCollection] = useState(false);
+  const [saveError, setSaveError] = useState<string | null>(null);
+  const [saving, setSaving] = useState(false);
+  const saveTitleRef = useRef<HTMLInputElement>(null);
+  const saveTriggerRef = useRef<HTMLButtonElement>(null);
 
   const enabledHeaders = headers.filter(row => row.enabled && row.key.trim());
   const enabledParameters = params.filter(row => row.enabled && row.key.trim());
@@ -48,6 +60,10 @@ export function App() {
     : tab !== "Headers" && headerError
       ? "Fix the Headers input before sending."
       : null;
+
+  useEffect(() => {
+    if (saveOpen) saveTitleRef.current?.focus();
+  }, [saveOpen]);
 
   function updateRows(setter: (rows: RequestRow[]) => void, rows: RequestRow[], id: number, change: Partial<RequestRow>) {
     setter(rows.map(row => row.id === id ? { ...row, ...change } : row));
@@ -90,6 +106,13 @@ export function App() {
     setHistoryError(null);
     try { setHistoryItems(await getTracerHistory()); }
     catch (cause) { setHistoryError(cause instanceof Error ? cause.message : "History could not be loaded."); }
+    try {
+      setCollections(await getTracerCollections());
+      setCollectionsLoaded(true);
+      setCollectionError(null);
+    } catch (cause) {
+      setCollectionError(cause instanceof Error ? cause.message : "Collections could not be loaded.");
+    }
     finally { setHistoryLoading(false); }
   }
 
@@ -112,6 +135,110 @@ export function App() {
     setPreviousResult(false);
     setResponseTab("Body");
     setTab("Params");
+  }
+
+  function loadSavedRequest(item: SavedRequest) {
+    const parsed = new URL(item.url);
+    setUrl(`${parsed.origin}${parsed.pathname}${parsed.hash}`);
+    const restoredParams = rowsFromUrl(item.url, nextRowId);
+    setParams(restoredParams.length ? restoredParams : [makeRow(nextRowId)]);
+    const firstHeaderId = nextRowId + Math.max(1, restoredParams.length);
+    const restoredHeaders = item.headers.map((header, index) => ({
+      id: firstHeaderId + index, key: header.name, value: header.redacted ? "" : header.value,
+      enabled: !header.redacted, redacted: header.redacted,
+    }));
+    setHeaders(restoredHeaders.length ? restoredHeaders : [makeRow(firstHeaderId)]);
+    setNextRowId(firstHeaderId + Math.max(1, restoredHeaders.length));
+    setMethod(item.method);
+    setBody(item.body ?? "");
+    setResult(null);
+    setError(null);
+    setHistoryNotice(null);
+    setPreviousResult(false);
+    setResponseTab("Body");
+    setTab("Params");
+  }
+
+  async function openSaveDialog() {
+    let availableCollections = collections;
+    if (!collectionsLoaded) {
+      try {
+        availableCollections = await getTracerCollections();
+        setCollections(availableCollections);
+        setCollectionsLoaded(true);
+        setCollectionError(null);
+      } catch (cause) {
+        setCollectionError(cause instanceof Error ? cause.message : "Collections could not be loaded.");
+      }
+    }
+    const parsed = new URL(finalUrl);
+    setSaveTitle(`${method} ${parsed.pathname || "/"}`);
+    setSaveCollectionId(availableCollections[0]?.id ?? "");
+    setCreateCollection(availableCollections.length === 0);
+    setNewCollectionName("");
+    setSaveError(null);
+    setSaveOpen(true);
+  }
+
+  function closeSaveDialog() {
+    if (saving) return;
+    setSaveOpen(false);
+    setSaveError(null);
+    requestAnimationFrame(() => saveTriggerRef.current?.focus());
+  }
+
+  async function handleSave(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (saving || validationError || !finalUrl.trim()) return;
+    setSaving(true);
+    setSaveError(null);
+    const requestHeaders = Object.fromEntries(enabledHeaders.map(row => [row.key.trim(), row.value]));
+    try {
+      await saveTracerRequest({
+        collectionId: createCollection ? null : saveCollectionId,
+        newCollectionName: createCollection ? newCollectionName : null,
+        title: saveTitle,
+        method,
+        url: finalUrl,
+        headers: requestHeaders,
+        ...(body.trim() && (method === "POST" || method === "PUT" || method === "PATCH") ? { body } : {}),
+      });
+      setSaveOpen(false);
+      setHistoryNotice("Request saved to Collections.");
+      requestAnimationFrame(() => saveTriggerRef.current?.focus());
+      try {
+        setCollections(await getTracerCollections());
+        setCollectionsLoaded(true);
+        setCollectionError(null);
+      } catch (cause) {
+        setCollectionError(cause instanceof Error ? cause.message : "Collections could not be refreshed.");
+      }
+    } catch (cause) {
+      setSaveError(cause instanceof Error ? cause.message : "The request could not be saved. Try again.");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  function handleSaveDialogKeyDown(event: KeyboardEvent<HTMLElement>) {
+    if (event.key === "Escape") {
+      event.preventDefault();
+      closeSaveDialog();
+      return;
+    }
+    if (event.key !== "Tab") return;
+    const controls = Array.from(event.currentTarget.querySelectorAll<HTMLElement>(
+      'button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled])',
+    ));
+    const first = controls[0];
+    const last = controls[controls.length - 1];
+    if (event.shiftKey && document.activeElement === first) {
+      event.preventDefault();
+      last?.focus();
+    } else if (!event.shiftKey && document.activeElement === last) {
+      event.preventDefault();
+      first?.focus();
+    }
   }
 
   function handleResponseTabKeyDown(event: KeyboardEvent<HTMLButtonElement>) {
@@ -148,7 +275,7 @@ export function App() {
     <main className="workspace">
       <header><h1>{platformName}</h1></header>
         <div className="history-navigation">
-          <button type="button" aria-expanded={historyOpen} aria-controls="request-history" onClick={toggleHistory}>{historyOpen ? "Hide History" : "Show History"}</button>
+          <button type="button" aria-label={`${historyOpen ? "Hide" : "Show"} History & Collections`} aria-expanded={historyOpen} aria-controls="request-history" onClick={toggleHistory}>{historyOpen ? "Hide History" : "Show History"} &amp; Collections</button>
           <aside id="request-history" aria-label="Request History" hidden={!historyOpen}>
             <h2>History</h2>
             {historyLoading && <p role="status">Loading History…</p>}
@@ -159,6 +286,18 @@ export function App() {
                 <strong>{item.method}</strong> {item.statusCode ? `HTTP ${item.statusCode}` : item.failure}<small>{new URL(item.url).pathname} · {new Date(item.createdAt).toLocaleString()}</small>
               </button>
             </li>)}</ul>
+            <h2>Collections</h2>
+            {collectionError && <p role="alert">{collectionError}</p>}
+            {!collectionError && collections.length === 0 && <p>No saved collections yet. Save a configured request to keep it for later.</p>}
+            {collections.map(collection => <section className="saved-collection" key={collection.id} aria-label={collection.name}>
+              <h3>{collection.name}</h3>
+              {collection.requests.length === 0 && <p>No saved requests in this collection.</p>}
+              <ul>{collection.requests.map(item => <li key={item.id}>
+                <button type="button" disabled={loading} onClick={() => loadSavedRequest(item)} aria-label={`Load saved ${item.method} ${item.title}`}>
+                  <strong>{item.method}</strong> {item.title}<small>{new URL(item.url).pathname}</small>
+                </button>
+              </li>)}</ul>
+            </section>)}
           </aside>
         </div>
       <div className="panes">
@@ -174,6 +313,7 @@ export function App() {
               <input id="request-url" aria-label="Request URL" type="url" placeholder="Enter URL" value={url} onChange={event => setUrl(event.target.value)} disabled={loading} aria-invalid={Boolean(urlError || finalUrlError)} aria-describedby={urlError || finalUrlError ? "url-error" : undefined} />
               <button type="submit" aria-describedby={hiddenValidationError ? "send-validation-error" : undefined} disabled={!url.trim() || Boolean(validationError) || loading}>{loading ? "Sending…" : "Send"}</button>
             </div>
+            <button ref={saveTriggerRef} type="button" className="save-request-button" onClick={openSaveDialog} disabled={!url.trim() || Boolean(validationError) || loading}>Save to collection</button>
             {(urlError || finalUrlError) && <p id="url-error" className="field-error" role="alert">{urlError || finalUrlError}</p>}
             {hiddenValidationError && <p id="send-validation-error" className="field-error" role="alert">{hiddenValidationError}</p>}
             <div className="tabs" role="tablist" aria-label="Request inputs">
@@ -235,6 +375,29 @@ export function App() {
           </div>}
         </section>
       </div>
+      {saveOpen && <div className="dialog-backdrop" onMouseDown={event => { if (event.target === event.currentTarget) closeSaveDialog(); }}>
+        <section className="save-dialog" role="dialog" aria-modal="true" aria-labelledby="save-dialog-title" aria-describedby={saveError ? "save-error" : undefined} onKeyDown={handleSaveDialogKeyDown}>
+          <h2 id="save-dialog-title">Save to collection</h2>
+          <form onSubmit={handleSave}>
+            <label htmlFor="saved-request-title">Request title</label>
+            <input ref={saveTitleRef} id="saved-request-title" value={saveTitle} maxLength={120} required disabled={saving} onChange={event => setSaveTitle(event.target.value)} />
+            <fieldset disabled={saving}>
+              <legend>Collection</legend>
+              <label><input type="radio" name="collection-choice" checked={!createCollection} disabled={collections.length === 0} onChange={() => setCreateCollection(false)} />Choose existing</label>
+              {collections.length > 0 && <select aria-label="Existing collection" value={saveCollectionId} disabled={createCollection || saving} onChange={event => setSaveCollectionId(event.target.value)}>
+                {collections.map(collection => <option key={collection.id} value={collection.id}>{collection.name}</option>)}
+              </select>}
+              <label><input type="radio" name="collection-choice" checked={createCollection} onChange={() => setCreateCollection(true)} />Create new collection</label>
+              {createCollection && <input aria-label="New collection name" placeholder="Collection name" value={newCollectionName} maxLength={80} required disabled={saving} onChange={event => setNewCollectionName(event.target.value)} />}
+            </fieldset>
+            {saveError && <p id="save-error" role="alert">{saveError}</p>}
+            <div className="dialog-actions">
+              <button type="button" onClick={closeSaveDialog} disabled={saving}>Cancel</button>
+              <button type="submit" disabled={saving || !saveTitle.trim() || (createCollection ? !newCollectionName.trim() : !saveCollectionId)}>{saving ? "Saving…" : "Save request"}</button>
+            </div>
+          </form>
+        </section>
+      </div>}
     </main>
   );
 }

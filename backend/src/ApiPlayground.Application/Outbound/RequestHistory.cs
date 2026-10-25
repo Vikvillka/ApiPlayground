@@ -32,6 +32,17 @@ public static class RequestHistoryRedaction
     public static bool IsSensitiveQueryName(string name) =>
         ContainsAny(name, "token", "api-key", "apikey", "secret", "password");
 
+    public static string SanitizeUrl(string url, out IReadOnlyList<string> redactedNames)
+    {
+        if (!Uri.TryCreate(url, UriKind.Absolute, out var uri))
+        {
+            redactedNames = [];
+            return url;
+        }
+
+        return SanitizeUrl(uri, out redactedNames);
+    }
+
     public static RequestHistorySnapshot Create(OutboundRequest request, OutboundResult result, DateTimeOffset? now = null)
     {
         var headers = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);

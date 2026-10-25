@@ -9,6 +9,7 @@ public sealed class MigrationContinuityTests
 {
     private const string InitialMigrationId = "20261018000000_InitialPlatformBaseline";
     private const string HistoryMigrationId = "20261023000000_RequestHistory";
+    private const string CollectionsMigrationId = "20261025165909_RequestCollections";
     private readonly string _adminConnectionString;
 
     public MigrationContinuityTests()
@@ -57,7 +58,7 @@ public sealed class MigrationContinuityTests
             await MigrateAsync(connectionString);
             var migrationIds = await ReadMigrationIdsAsync(connectionString);
 
-            Assert.Equal([InitialMigrationId, HistoryMigrationId], migrationIds);
+            Assert.Equal([InitialMigrationId, HistoryMigrationId, CollectionsMigrationId], migrationIds);
             await using var connection = new NpgsqlConnection(connectionString);
             await connection.OpenAsync();
             await using var command = connection.CreateCommand();
@@ -74,7 +75,7 @@ public sealed class MigrationContinuityTests
             .Options;
         using var context = new ApiPlayground.Api.Data.PlatformDbContext(options);
 
-        Assert.Equal([InitialMigrationId, HistoryMigrationId], context.Database.GetMigrations());
+        Assert.Equal([InitialMigrationId, HistoryMigrationId, CollectionsMigrationId], context.Database.GetMigrations());
     }
 
     [Fact]
@@ -95,7 +96,7 @@ public sealed class MigrationContinuityTests
             await MigrateAsync(connectionString);
             var migrationIds = await ReadMigrationIdsAsync(connectionString);
 
-            Assert.Equal([InitialMigrationId, HistoryMigrationId], migrationIds);
+            Assert.Equal([InitialMigrationId, HistoryMigrationId, CollectionsMigrationId], migrationIds);
         });
     }
 
@@ -129,7 +130,7 @@ public sealed class MigrationContinuityTests
                     "ef database update --project src/ApiPlayground.Infrastructure/ApiPlayground.Infrastructure.csproj --startup-project src/ApiPlayground.Api/ApiPlayground.Api.csproj",
                     environment);
                 var initialMigrationIds = await ReadMigrationIdsAsync(connectionString);
-                Assert.Equal([InitialMigrationId, HistoryMigrationId], initialMigrationIds);
+                Assert.Equal([InitialMigrationId, HistoryMigrationId, CollectionsMigrationId], initialMigrationIds);
                 AddTemporaryMigrationModel(copiedBackend);
                 await RunDotnetAsync(
                     copiedBackend,
@@ -161,10 +162,11 @@ public sealed class MigrationContinuityTests
                     environment);
 
                 var migrationIds = await ReadMigrationIdsAsync(connectionString);
-                Assert.Equal(3, migrationIds.Length);
+                Assert.Equal(4, migrationIds.Length);
                 Assert.Equal(InitialMigrationId, migrationIds[0]);
                 Assert.Equal(HistoryMigrationId, migrationIds[1]);
-                Assert.Equal(generatedId, migrationIds[2]);
+                Assert.Equal(CollectionsMigrationId, migrationIds[2]);
+                Assert.Equal(generatedId, migrationIds[3]);
             }
             finally
             {

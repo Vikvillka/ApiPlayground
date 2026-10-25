@@ -219,6 +219,72 @@ public sealed class TracerEndpointTests
     }
 
     [Fact]
+    public async Task Collection_routes_are_guarded_and_save_maps_only_application_data()
+    {
+        var store = new InMemoryCollectionStore();
+        await using var factory = new WebApplicationFactory<Program>().WithWebHostBuilder(builder => builder.ConfigureTestServices(services =>
+        {
+            services.RemoveAll<IRequestCollectionStore>();
+            services.AddSingleton<IRequestCollectionStore>(store);
+        }));
+        var client = factory.CreateClient();
+
+        using (var blockedRequest = new HttpRequestMessage(HttpMethod.Get, "/api/tracer/collections"))
+        using (var blockedResponse = await client.SendAsync(blockedRequest))
+        {
+            Assert.Equal(HttpStatusCode.Forbidden, blockedResponse.StatusCode);
+        }
+
+        using (var saveRequest = CreateAllowedRequest("https://example.test/items?mode=full", path: "/api/tracer/collections/requests"))
+        {
+            saveRequest.Content = JsonContent.Create(new
+            {
+                collectionId = (Guid?)null,
+                newCollectionName = "Reusable",
+                title = "GET /items",
+                method = "GET",
+                url = "https://example.test/items?mode=full",
+                headers = new Dictionary<string, string> { ["Cookie"] = "private", ["X-Visible"] = "yes" },
+            });
+            using var savedResponse = await client.SendAsync(saveRequest);
+            Assert.Equal(HttpStatusCode.Created, savedResponse.StatusCode);
+            var saved = await savedResponse.Content.ReadFromJsonAsync<SavedRequestDto>();
+            Assert.NotNull(saved);
+            Assert.Equal("GET /items", saved.Title);
+            Assert.Equal(string.Empty, saved.Headers.Single(header => header.Name == "Cookie").Value);
+            Assert.True(saved.Headers.Single(header => header.Name == "Cookie").Redacted);
+            Assert.Equal("yes", saved.Headers.Single(header => header.Name == "X-Visible").Value);
+        }
+
+        using var listRequest = CreateAllowedRequest(string.Empty, HttpMethod.Get, "/api/tracer/collections");
+        using var listResponse = await client.SendAsync(listRequest);
+        Assert.Equal(HttpStatusCode.OK, listResponse.StatusCode);
+        var collections = await listResponse.Content.ReadFromJsonAsync<CollectionDto[]>();
+        Assert.NotNull(collections);
+        Assert.Equal("Reusable", Assert.Single(collections!).Name);
+        Assert.Single(collections[0].Requests);
+    }
+
+    [Fact]
+    public async Task Collections_list_persistence_failure_returns_sanitized_service_unavailable()
+    {
+        await using var factory = new WebApplicationFactory<Program>().WithWebHostBuilder(builder => builder.ConfigureTestServices(services =>
+        {
+            services.RemoveAll<IRequestCollectionStore>();
+            services.AddSingleton<IRequestCollectionStore>(new FailingCollectionStore());
+        }));
+        using var request = CreateAllowedRequest(string.Empty, HttpMethod.Get, "/api/tracer/collections");
+
+        using var response = await factory.CreateClient().SendAsync(request);
+        var body = await response.Content.ReadAsStringAsync();
+
+        Assert.Equal(HttpStatusCode.ServiceUnavailable, response.StatusCode);
+        Assert.Contains("Collections could not be loaded", body);
+        Assert.DoesNotContain("database password", body, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("Npgsql", body, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
     public async Task Http_error_response_preserves_target_status_elapsed_and_repeated_headers()
     {
         await using var target = await Outbound.ControlledLoopbackServer.StartAsync(async context =>
@@ -425,8 +491,41 @@ public sealed class TracerEndpointTests
             Task.FromResult(_items.SingleOrDefault(item => item.Id == id));
     }
 
+    private sealed class InMemoryCollectionStore : IRequestCollectionStore
+    {
+        private readonly List<RequestCollectionSnapshot> _items = [];
+        public Task<IReadOnlyList<RequestCollectionSnapshot>> ListAsync(CancellationToken cancellationToken = default) =>
+            Task.FromResult<IReadOnlyList<RequestCollectionSnapshot>>(_items.ToArray());
+
+        public Task<SavedRequestSnapshot> SaveAsync(SavedRequestSnapshot request, Guid? collectionId, string? newCollectionName,
+            CancellationToken cancellationToken = default)
+        {
+            var collection = collectionId is null
+                ? new RequestCollectionSnapshot(Guid.NewGuid(), newCollectionName!, [])
+                : _items.Single(item => item.Id == collectionId.Value);
+            var saved = request with { CollectionId = collection.Id, CollectionName = collection.Name };
+            var updated = collection with { Requests = collection.Requests.Append(saved).ToArray() };
+            var index = _items.FindIndex(item => item.Id == collection.Id);
+            if (index < 0) _items.Add(updated);
+            else _items[index] = updated;
+            return Task.FromResult(saved);
+        }
+    }
+
+    private sealed class FailingCollectionStore : IRequestCollectionStore
+    {
+        public Task<IReadOnlyList<RequestCollectionSnapshot>> ListAsync(CancellationToken cancellationToken = default) =>
+            throw new InvalidOperationException("database password: secret; Npgsql failure details");
+
+        public Task<SavedRequestSnapshot> SaveAsync(SavedRequestSnapshot request, Guid? collectionId, string? newCollectionName,
+            CancellationToken cancellationToken = default) => Task.FromResult(request);
+    }
+
     private sealed record TracerResponse(string Failure, int? StatusCode, double ElapsedMilliseconds,
         Dictionary<string, string[]> Headers, string Body, bool PersistenceVerified, string? Error, bool RequestSent);
 
     private sealed record HistoryDto(Guid Id, string Url, string[] RedactedQueryParameters);
+    private sealed record SavedRequestDto(Guid Id, string Title, HeaderDto[] Headers);
+    private sealed record HeaderDto(string Name, string Value, bool Redacted);
+    private sealed record CollectionDto(Guid Id, string Name, SavedRequestDto[] Requests);
 }

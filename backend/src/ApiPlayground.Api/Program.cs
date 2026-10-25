@@ -9,6 +9,7 @@ builder.Services.AddGuardedOutbound(OutboundPolicy.PublicInternetOnly());
 builder.Services.AddTracerPersistenceSmokeCheck();
 builder.Services.AddScoped<GetTracerUseCase>();
 builder.Services.AddScoped<RequestHistoryUseCase>();
+builder.Services.AddScoped<SaveRequestUseCase>();
 
 var app = builder.Build();
 
@@ -56,6 +57,40 @@ app.MapGet("/api/tracer/history/{id:guid}", async (Guid id, RequestHistoryUseCas
 {
 	var item = await useCase.FindAsync(id, cancellationToken);
 	return item is null ? Results.NotFound() : Results.Json(ToHistoryDto(item));
+}).WithMetadata(new TracerRequestGuardMetadata());
+app.MapGet("/api/tracer/collections", async (SaveRequestUseCase useCase, CancellationToken cancellationToken) =>
+{
+	try
+	{
+		var collections = await useCase.ListAsync(cancellationToken);
+		return Results.Json(collections.Select(collection => new
+		{
+			id = collection.Id,
+			name = collection.Name,
+			requests = collection.Requests.Select(ToSavedRequestDto),
+		}));
+	}
+	catch (Exception)
+	{
+		return Results.Problem("Collections could not be loaded. Try again.", statusCode: StatusCodes.Status503ServiceUnavailable);
+	}
+}).WithMetadata(new TracerRequestGuardMetadata());
+app.MapPost("/api/tracer/collections/requests", async (SaveCollectionRequest request, SaveRequestUseCase useCase, CancellationToken cancellationToken) =>
+{
+	try
+	{
+		var saved = await useCase.SaveAsync(new SaveRequestCommand(request.CollectionId, request.NewCollectionName,
+			request.Title, request.Method, request.Url, request.Headers ?? new Dictionary<string, string>(), request.Body), cancellationToken);
+		return Results.Json(ToSavedRequestDto(saved), statusCode: StatusCodes.Status201Created);
+	}
+	catch (ArgumentException exception)
+	{
+		return Results.BadRequest(new { error = exception.Message });
+	}
+	catch (Exception)
+	{
+		return Results.Problem("The request could not be saved. Your request is still available to retry.", statusCode: StatusCodes.Status503ServiceUnavailable);
+	}
 }).WithMetadata(new TracerRequestGuardMetadata());
 app.MapPost("/api/tracer/get", async (TracerRequest request, GetTracerUseCase useCase, CancellationToken cancellationToken) =>
 {
@@ -145,6 +180,25 @@ static object ToHistoryDto(RequestHistorySnapshot item) => new
 	statusCode = item.StatusCode, elapsedMilliseconds = item.ElapsedMilliseconds,
 };
 
+static object ToSavedRequestDto(SavedRequestSnapshot item) => new
+{
+	id = item.Id,
+	createdAt = item.CreatedAt,
+	collectionId = item.CollectionId,
+	collectionName = item.CollectionName,
+	title = item.Title,
+	method = item.Method,
+	url = item.Url,
+	headers = item.Headers.Select(header => new
+	{
+		name = header.Key,
+		value = item.RedactedHeaders.Contains(header.Key, StringComparer.OrdinalIgnoreCase) ? string.Empty : header.Value,
+		redacted = item.RedactedHeaders.Contains(header.Key, StringComparer.OrdinalIgnoreCase),
+	}),
+	redactedHeaders = item.RedactedHeaders,
+	body = item.Body,
+};
+
 app.Run();
 
 public sealed record TracerRequest(
@@ -152,6 +206,14 @@ public sealed record TracerRequest(
 	string Method = "GET",
 	string? Body = null,
 	Dictionary<string, string>? Headers = null);
+public sealed record SaveCollectionRequest(
+	Guid? CollectionId,
+	string? NewCollectionName,
+	string Title,
+	string Method,
+	string Url,
+	Dictionary<string, string>? Headers = null,
+	string? Body = null);
 public sealed class TracerRequestGuardMetadata;
 
 public partial class Program { }

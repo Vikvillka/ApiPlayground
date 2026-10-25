@@ -98,7 +98,6 @@ covers = ["CAP-4"]
 after = [6]
 hitl = false
 risk = "medium"
-unknown = "The project owner must decide the sensitive-header classification before Collections persist request values; until then, sensitive values must not be stored."
 references = ["../spec-apiplayground/spec-apiplayground.md#capabilities", "../ux-apiplayground/DESIGN.md", "../ux-apiplayground/EXPERIENCE.md"]
 
 [[entry]]
@@ -122,6 +121,5 @@ covers = ["CAP-1", "CAP-2", "CAP-3", "CAP-4"]
 after = [2, 3, 4, 5, 6, 7, 8, 10]
 hitl = true
 risk = "high"
-unknown = "The approved test target and security-policy decisions must be settled before dispatch or policy-specific suite cases can run; this suite verifies decisions but does not make them."
 references = ["../spec-apiplayground/spec-apiplayground.md#success-signal", "../spec-apiplayground/mvp-scope.md#request-safety-requirements", "../ux-apiplayground/EXPERIENCE.md"]
 notes = ["A person separately confirms the safety-suite results; this confirmation is outside the suite's automated pass/fail check."]

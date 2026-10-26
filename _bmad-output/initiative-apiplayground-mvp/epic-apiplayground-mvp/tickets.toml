@@ -34,7 +34,6 @@ covers = []
 after = [1, 10]
 hitl = false
 risk = "high"
-unknown = "The project owner must approve allowed destinations and the controlled test target, plus the exact SSRF, DNS/rebinding, redirect, timeout, and response-size policies before implementation or outbound testing."
 references = ["../spec-apiplayground/spec-apiplayground.md#constraints", "../spec-apiplayground/mvp-scope.md#request-safety-requirements"]
 notes = ["The closing independent outbound-safety suite in Story 9 is a check outside this story's own tests."]
 

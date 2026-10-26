@@ -25,7 +25,7 @@ headless: false
 - **Duplication map — checked, bounded:** Story 9 factors shared production route/guard composition for Kestrel and production rather than adding another transport. Its DB setup fixture is used by both closeout and browser-host tests. Scope was source/tests changed in `1.9`; earlier per-story code was not mechanically clone-scanned.
 - **Size growth — measured and inspected:** Largest new Story 9 files by net churn are `TracerEndpoints.cs` (+209), `Story9CloseoutTests.cs` (+299 including the DNS regression), `Story9DisposableDatabase.cs` (+228), `Story9BrowserHostRunnerTests.cs` (+160), and the E2E runner/spec (+230 combined). They are bounded endpoint/test/fixture/runner modules, not one accumulated product class. `Program.cs` has net -201 lines due to route extraction. No file-size concern found in this range.
 - **Pattern divergence — checked, narrowed:** The new API endpoint mapping follows existing minimal-API composition, tests follow the existing xUnit/controlled-loopback patterns, and migrations remain unchanged. The new test-only DB role harness is specialized but does not enter production composition.
-- **Spec-to-implementation reconciliation:** All four capabilities have implementation and end-to-end evidence recorded. Story 9's independent suite originally tested mixed DNS rejection but did not explicitly mutate DNS after validation; a deterministic regression now proves the connector receives the validated pinned IP after the resolver's backing answer changes. The approved outbound policy and sensitive-header classification are recorded in dated decisions, while two older epic open-question bullets still present those decisions as unresolved. This is documentation drift, not an implementation uncertainty.
+- **Spec-to-implementation reconciliation:** All four capabilities have implementation and end-to-end evidence recorded. Story 9's independent suite originally tested mixed DNS rejection but did not explicitly mutate DNS after validation; a deterministic regression now proves the connector receives the validated pinned IP after the resolver's backing answer changes. Two stale epic open-question bullets and Story 2's stale `unknown` approval marker were reconciled during closure against the owner-approved 2026-10-25 policy decision; the separate audience/usability discovery question remains open.
 
 ### Diff-scope lenses
 
@@ -46,19 +46,18 @@ No previous retrospective file exists for this epic or earlier epic in the initi
 
 ## Action items
 
-- **Proposed, deferred; owner: project owner — reconcile the epic's stale open questions.** Remove or mark settled the two bullets on outbound policy and sensitive-header classification using the dated decisions already recorded; retain the separate audience/usability discovery question. This is documentation-only and does not block the verified MVP criteria. Source: [epic envelope](epic-apiplayground-mvp.md#notes).
 - **Proposed, deferred; owner: project owner — record the Story 1 clean-checkout journey if that extra evidence is desired.** The plan's manual check has no completion record. The current-checkout health/UI check and disposable-database migration tests are evidence, but do not substitute for a fresh-clone journey. This is not a declared Done-when criterion. Source: [Story 1 manual checks](story-local-platform-baseline-plan.md#verification).
 - **Proposed, deferred; owner: project owner — repair Story 1.4's baseline reference after confirming the intended commit.** The recorded object does not resolve, so the Story 1.4 plan's diff range was not inferred and its retrospective diff review was narrowed. Source: Story 1.4 plan `baseline_revision` and Git object lookup recorded above.
 
 ## Acceptance verdict
 
-**Machine verdict: accepted-with-open-items.** All 10 child tickets are now `done`, and the four declared Done-when criteria are supported by implementation and test evidence. The remaining items are the three deferred, non-blocking follow-ups listed above; none is an unresolved requirement or a verified implementation blocker. The local topology check was performed on the current checkout, not a fresh clone, and is not represented as clean-checkout evidence. No live external API behavior is claimed from the browser test; automated dispatch remains test-owned loopback.
+**Machine verdict: accepted-with-open-items.** All 10 child tickets are now `done`, and the four declared Done-when criteria are supported by implementation and test evidence. The remaining items are the two deferred, non-blocking follow-ups listed above; neither is an unresolved requirement or a verified implementation blocker. The local topology check was performed on the current checkout, not a fresh clone, and is not represented as clean-checkout evidence. No live external API behavior is claimed from the browser test; automated dispatch remains test-owned loopback.
 
 ## Open questions
 
 - Story 1's literal clean-checkout manual journey remains unverified; it is deferred, not a declared acceptance criterion.
 - Story 1.4's baseline Git object remains unavailable; do not infer its diff range until the intended commit is confirmed.
-- The epic envelope's two outdated policy/classification open-question bullets should be reconciled with their later decisions; the target developer-scenario/usability question remains genuinely open for future discovery.
+- The target developer-scenario/usability question remains genuinely open for future discovery; it is outside the declared MVP Done when.
 
 ## Assumptions
 

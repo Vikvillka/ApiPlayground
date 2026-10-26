@@ -24,6 +24,51 @@ jobs:
       - run: npm run build
       - run: npm test
 
+  story9-closeout:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: postgres
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d postgres"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 10.0.x
+      - run: npm ci
+        working-directory: frontend
+      - run: npx playwright install --with-deps chromium
+        working-directory: frontend
+      - name: Provision limited Story 9 test administrator
+        run: >-
+          PGPASSWORD=postgres psql -h localhost -p 5432 -U postgres -d postgres
+          -v ON_ERROR_STOP=1
+          -c "CREATE ROLE apg_ci_admin LOGIN PASSWORD 'apg-ci-admin' CREATEDB CREATEROLE NOSUPERUSER NOREPLICATION NOBYPASSRLS"
+      - run: dotnet restore backend/ApiPlayground.sln
+      - run: dotnet build backend/ApiPlayground.sln --configuration Release --no-restore
+      - run: dotnet test backend/ApiPlayground.sln --configuration Release --no-build --filter FullyQualifiedName~Story9CloseoutTests
+        env:
+          APIPLAYGROUND_TEST_ADMIN_CONNECTION: Host=localhost;Port=5432;Database=postgres;Username=apg_ci_admin;Password=apg-ci-admin
+      - run: npm run test:e2e
+        working-directory: frontend
+        env:
+          APIPLAYGROUND_TEST_ADMIN_CONNECTION: Host=localhost;Port=5432;Database=postgres;Username=apg_ci_admin;Password=apg-ci-admin
+
   backend:
     runs-on: ubuntu-latest
     services:
@@ -45,8 +90,13 @@ jobs:
       - uses: actions/setup-dotnet@v4
         with:
           dotnet-version: 10.0.x
+      - name: Provision limited PostgreSQL test administrator
+        run: >-
+          PGPASSWORD=postgres psql -h localhost -p 5432 -U postgres -d postgres
+          -v ON_ERROR_STOP=1
+          -c "CREATE ROLE apg_ci_admin LOGIN PASSWORD 'apg-ci-admin' CREATEDB CREATEROLE NOSUPERUSER NOREPLICATION NOBYPASSRLS"
       - run: dotnet restore backend/ApiPlayground.sln
       - run: dotnet build backend/ApiPlayground.sln --configuration Release --no-restore
-      - run: dotnet test backend/ApiPlayground.sln --configuration Release --no-build
+      - run: dotnet test backend/ApiPlayground.sln --configuration Release --no-build --filter "FullyQualifiedName!~Story9BrowserHostRunnerTests"
         env:
-          APIPLAYGROUND_TEST_ADMIN_CONNECTION: Host=localhost;Port=5432;Database=postgres;Username=postgres;Password=postgres
+          APIPLAYGROUND_TEST_ADMIN_CONNECTION: Host=localhost;Port=5432;Database=postgres;Username=apg_ci_admin;Password=apg-ci-admin

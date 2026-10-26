@@ -1,4 +1,8 @@
 using System.Xml.Linq;
+using ApiPlayground.Application.Outbound;
+using ApiPlayground.Infrastructure;
+using ApiPlayground.Infrastructure.Outbound;
+using Microsoft.Extensions.DependencyInjection;
 using Xunit;
 
 namespace ApiPlayground.Tests;
@@ -63,6 +67,25 @@ public sealed class ArchitectureBoundaryTests
             .ToArray();
 
         Assert.True(violations.Length == 0, "Direct target-dispatch APIs are not permitted in runtime projects: " + string.Join("; ", violations));
+    }
+
+    [Fact]
+    public async Task Production_composition_uses_one_fixed_public_only_guard_without_test_switches()
+    {
+        var services = new ServiceCollection();
+        services.AddGuardedOutbound(OutboundPolicy.PublicInternetOnly());
+        Assert.Single(services, descriptor => descriptor.ServiceType == typeof(IOutboundRequestExecutor));
+
+        using var provider = services.BuildServiceProvider();
+        Assert.IsType<GuardedTargetHttpClient>(provider.GetRequiredService<IOutboundRequestExecutor>());
+        var policy = provider.GetRequiredService<OutboundPolicy>();
+        Assert.False(policy.AllowsAddress(new Uri("http://127.0.0.1/"), System.Net.IPAddress.Loopback));
+
+        var program = await File.ReadAllTextAsync(Path.Combine(BackendRoot, "src", "ApiPlayground.Api", "Program.cs"));
+        Assert.Contains("AddGuardedOutbound(OutboundPolicy.PublicInternetOnly())", program, StringComparison.Ordinal);
+        Assert.DoesNotContain("ForTestOnlyLoopbackEndpoint", program, StringComparison.Ordinal);
+        Assert.DoesNotContain("OutboundPolicy__", program, StringComparison.Ordinal);
+        Assert.DoesNotContain("CreateClient(", program, StringComparison.Ordinal);
     }
 
     private static void AssertReferences(string projectName, string[] expected)

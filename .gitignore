@@ -63,3 +63,4 @@ Desktop.ini
 .DS_Store
 
 *.user.toml
+frontend/test-results/

@@ -9,7 +9,7 @@ namespace ApiPlayground.Tests;
 public sealed class TracerPersistenceSmokeCheckTests
 {
     [Fact]
-    public async Task Actual_smoke_check_round_trips_and_drops_transaction_scoped_table()
+    public async Task Actual_smoke_check_round_trips_and_rolls_back_generated_table()
     {
         var migrationTests = new MigrationContinuityTests();
         await migrationTests.WithDisposableDatabase(async connectionString =>
@@ -23,9 +23,9 @@ public sealed class TracerPersistenceSmokeCheckTests
 
             var connection = dbContext.Database.GetDbConnection();
             await using var command = connection.CreateCommand();
-            command.CommandText = "SELECT to_regclass('pg_temp.apiplayground_tracer_smoke')::text";
+            command.CommandText = "SELECT count(*) FROM pg_class WHERE relname LIKE 'apg_tracer_smoke_%'";
             var tableName = await command.ExecuteScalarAsync();
-            Assert.True(tableName is null or DBNull, "The transaction-scoped smoke table should be dropped at commit.");
+            Assert.Equal(0L, Convert.ToInt64(tableName));
         });
     }
 }

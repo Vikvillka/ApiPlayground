@@ -2,6 +2,7 @@ using ApiPlayground.Application.Outbound;
 using ApiPlayground.Api.Data;
 using Microsoft.EntityFrameworkCore;
 using System.Data;
+using System.Text.RegularExpressions;
 
 namespace ApiPlayground.Infrastructure.Outbound;
 
@@ -13,18 +14,21 @@ public sealed class PostgresTracerPersistenceSmokeCheck(PlatformDbContext dbCont
         var openedHere = connection.State != ConnectionState.Open;
         if (openedHere)
             await dbContext.Database.OpenConnectionAsync(cancellationToken);
+        await using var transaction = await connection.BeginTransactionAsync(cancellationToken);
         try
         {
-            await using var transaction = await connection.BeginTransactionAsync(cancellationToken);
+            var tableName = $"apg_tracer_smoke_{Guid.NewGuid():N}";
+            if (!Regex.IsMatch(tableName, @"\Aapg_tracer_smoke_[0-9a-f]{32}\z", RegexOptions.CultureInvariant))
+                throw new InvalidOperationException("Refusing a smoke-check table name outside the exact generated pattern.");
             await using var create = connection.CreateCommand();
             create.Transaction = transaction;
-            create.CommandText = "CREATE TEMP TABLE IF NOT EXISTS apiplayground_tracer_smoke (marker text NOT NULL) ON COMMIT DROP";
+            create.CommandText = $"CREATE TABLE public.\"{tableName}\" (marker text NOT NULL)";
             await create.ExecuteNonQueryAsync(cancellationToken);
 
             const string marker = "tracer-ready";
             await using var insert = connection.CreateCommand();
             insert.Transaction = transaction;
-            insert.CommandText = "INSERT INTO apiplayground_tracer_smoke (marker) VALUES (@marker)";
+            insert.CommandText = $"INSERT INTO public.\"{tableName}\" (marker) VALUES (@marker)";
             var insertParameter = insert.CreateParameter();
             insertParameter.ParameterName = "marker";
             insertParameter.Value = marker;
@@ -33,18 +37,10 @@ public sealed class PostgresTracerPersistenceSmokeCheck(PlatformDbContext dbCont
 
             await using var read = connection.CreateCommand();
             read.Transaction = transaction;
-            read.CommandText = "SELECT marker FROM apiplayground_tracer_smoke LIMIT 1";
+            read.CommandText = $"SELECT marker FROM public.\"{tableName}\" LIMIT 1";
             var observed = await read.ExecuteScalarAsync(cancellationToken);
-            await using var delete = connection.CreateCommand();
-            delete.Transaction = transaction;
-            delete.CommandText = "DELETE FROM apiplayground_tracer_smoke WHERE marker = @marker";
-            var deleteParameter = delete.CreateParameter();
-            deleteParameter.ParameterName = "marker";
-            deleteParameter.Value = marker;
-            delete.Parameters.Add(deleteParameter);
-            var removed = await delete.ExecuteNonQueryAsync(cancellationToken);
-            await transaction.CommitAsync(cancellationToken);
-            return string.Equals(observed as string, marker, StringComparison.Ordinal) && removed == 1;
+            await transaction.RollbackAsync(cancellationToken);
+            return string.Equals(observed as string, marker, StringComparison.Ordinal);
         }
         finally
         {

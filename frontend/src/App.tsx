@@ -1,5 +1,5 @@
 import { platformName } from "./platform";
-import { useEffect, useRef, useState, type FormEvent, type KeyboardEvent } from "react";
+import { useLayoutEffect, useRef, useState, type FormEvent, type KeyboardEvent } from "react";
 import { getTracerCollections, getTracerHistory, saveTracerRequest, sendTracerRequest, type HistoryItem, type RequestCollection, type SavedRequest, type TracerResponse } from "./tracer";
 import "./App.css";
 
@@ -61,7 +61,7 @@ export function App() {
       ? "Fix the Headers input before sending."
       : null;
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     if (saveOpen) saveTitleRef.current?.focus();
   }, [saveOpen]);
 

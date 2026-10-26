@@ -180,56 +180,22 @@ public sealed class MigrationContinuityTests
 
     internal async Task WithDisposableDatabase(Func<string, Task> test)
     {
-        var adminBuilder = new NpgsqlConnectionStringBuilder(_adminConnectionString);
-        var databaseName = "apg_mig_" + Guid.NewGuid().ToString("N");
-        var testBuilder = new NpgsqlConnectionStringBuilder(_adminConnectionString) { Database = databaseName };
-        var quotedName = "\"" + databaseName.Replace("\"", "\"\"", StringComparison.Ordinal) + "\"";
-        var created = false;
+        await using var database = await Story9DisposableDatabase.CreateAsync(_adminConnectionString);
+        await test(database.AppConnectionString);
+    }
 
-        try
-        {
-            await using (var connection = new NpgsqlConnection(adminBuilder.ConnectionString))
-            {
-                await connection.OpenAsync();
-                await using var command = connection.CreateCommand();
-                command.CommandText = $"CREATE DATABASE {quotedName}";
-                await command.ExecuteNonQueryAsync();
-                created = true;
-            }
+    [Fact]
+    public async Task Story9_disposable_database_uses_a_restricted_new_app_login_and_applies_migrations()
+    {
+        await using var database = await Story9DisposableDatabase.CreateAsync(_adminConnectionString);
+        var builder = new DbContextOptionsBuilder<ApiPlayground.Api.Data.PlatformDbContext>()
+            .UseNpgsql(database.AppConnectionString, postgres => postgres.MigrationsAssembly("ApiPlayground.Infrastructure"))
+            .Options;
+        await using (var context = new ApiPlayground.Api.Data.PlatformDbContext(builder))
+            await context.Database.MigrateAsync();
 
-            try
-            {
-                await using (var connection = new NpgsqlConnection(testBuilder.ConnectionString))
-                {
-                    await connection.OpenAsync();
-                    await using var command = connection.CreateCommand();
-                    command.CommandText = "SELECT current_database()";
-                    Assert.Equal(databaseName, await command.ExecuteScalarAsync());
-                }
-
-                await test(testBuilder.ConnectionString);
-            }
-            finally
-            {
-                await using var connection = new NpgsqlConnection(adminBuilder.ConnectionString);
-                await connection.OpenAsync();
-                await using var command = connection.CreateCommand();
-                command.CommandText = $"DROP DATABASE IF EXISTS {quotedName} WITH (FORCE)";
-                await command.ExecuteNonQueryAsync();
-                created = false;
-            }
-        }
-        finally
-        {
-            if (created)
-            {
-                await using var connection = new NpgsqlConnection(adminBuilder.ConnectionString);
-                await connection.OpenAsync();
-                await using var command = connection.CreateCommand();
-                command.CommandText = $"DROP DATABASE IF EXISTS {quotedName} WITH (FORCE)";
-                await command.ExecuteNonQueryAsync();
-            }
-        }
+        var migrationIds = await ReadMigrationIdsAsync(database.AppConnectionString);
+        Assert.Equal([InitialMigrationId, HistoryMigrationId, CollectionsMigrationId], migrationIds);
     }
 
     private static async Task MigrateAsync(string connectionString, string? migrationsAssembly = "ApiPlayground.Infrastructure")

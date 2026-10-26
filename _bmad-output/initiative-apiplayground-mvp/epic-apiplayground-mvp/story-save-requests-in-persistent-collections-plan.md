@@ -3,7 +3,7 @@ title: 'Save requests in persistent collections'
 type: 'feature'
 ticket: '7'
 created: '2026-10-25'
-status: 'built'
+status: done
 baseline_revision: '4a1de9de79290af096952db56d10933288ae7338'
 route: 'full'
 route_source: 'auto'

@@ -82,6 +82,37 @@ public sealed class Story9CloseoutTests
     }
 
     [Fact]
+    public async Task Dns_answer_change_after_validation_does_not_change_the_pinned_connection_target()
+    {
+        var validatedAddress = IPAddress.Parse("8.8.8.8");
+        var changedAddress = IPAddress.Loopback;
+        var currentAnswers = new[] { validatedAddress };
+        var lookupCount = 0;
+        IPEndPoint? connectedEndpoint = null;
+        var executor = new GuardedTargetHttpClient(
+            OutboundPolicy.PublicInternetOnly(),
+            (_, _) =>
+            {
+                lookupCount++;
+                return Task.FromResult(currentAnswers);
+            },
+            connector: (endpoint, _) =>
+            {
+                currentAnswers = [changedAddress];
+                connectedEndpoint = endpoint;
+                return Task.FromException<Stream>(new HttpRequestException("Connection intentionally stopped by test."));
+            });
+
+        var result = await executor.ExecuteAsync(new OutboundRequest(
+            new Uri("http://rebind.example.test/"), "GET"));
+
+        Assert.Equal(OutboundFailure.TransportFailure, result.Failure);
+        Assert.Equal(1, lookupCount);
+        Assert.Equal(validatedAddress, connectedEndpoint?.Address);
+        Assert.NotEqual(changedAddress, connectedEndpoint?.Address);
+    }
+
+    [Fact]
     public async Task Redirect_is_not_followed_to_a_second_target()
     {
         await using var second = await ControlledLoopbackServer.StartAsync();

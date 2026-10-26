@@ -3,7 +3,7 @@ title: 'Browse and replay request history'
 type: 'feature'
 ticket: '6'
 created: '2026-10-23'
-status: 'built'
+status: done
 baseline_revision: '58ffd1962d5d66b020849e9344db2f1d5fb4ee32'
 route: 'full'
 route_source: 'pinned'

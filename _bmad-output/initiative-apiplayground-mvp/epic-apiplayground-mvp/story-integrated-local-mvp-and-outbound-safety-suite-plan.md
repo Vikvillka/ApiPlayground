@@ -3,7 +3,7 @@ title: 'Integrated local MVP and outbound-safety suite'
 type: 'feature'
 ticket: '9'
 created: '2026-10-26'
-status: 'built'
+status: done
 baseline_revision: '9b0b8d4d1afb0fea94301a242f5f4b417dac0d11'
 route: 'full'
 route_source: 'pinned'

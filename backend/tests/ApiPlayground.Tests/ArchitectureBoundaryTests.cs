@@ -99,7 +99,8 @@ public sealed class ArchitectureBoundaryTests
         var projectFile = Directory.EnumerateFiles(Path.Combine(BackendRoot, "src", projectName), "*.csproj").Single();
         var document = XDocument.Load(projectFile);
         return document.Descendants("ProjectReference")
-            .Select(element => Path.GetFileNameWithoutExtension((string?)element.Attribute("Include") ?? string.Empty))
+            .Select(element => Path.GetFileNameWithoutExtension(
+                ((string?)element.Attribute("Include") ?? string.Empty).Replace('\\', '/')))
             .Order(StringComparer.Ordinal)
             .ToArray();
     }

@@ -257,6 +257,8 @@ public sealed class OutboundSafetyTests
         Assert.Throws<ArgumentException>(() => OutboundPolicy.ForTestOnlyLoopbackEndpoint(new Uri("http://localhost:80/")));
         Assert.Throws<ArgumentException>(() => OutboundPolicy.ForTestOnlyLoopbackEndpoint(new Uri("http://0.0.0.0:12345/")));
         Assert.Throws<ArgumentException>(() => OutboundPolicy.ForTestOnlyLoopbackEndpoint(new Uri("http://127.0.0.1:8080/")));
+        Assert.Throws<ArgumentException>(() => OutboundPolicy.ForTestOnlyLoopbackEndpoint(new Uri("http://127.0.0.1:32767/")));
+        Assert.NotNull(OutboundPolicy.ForTestOnlyLoopbackEndpoint(new Uri("http://127.0.0.1:32768/")));
         Assert.Throws<ArgumentException>(() => OutboundPolicy.ForTestOnlyLoopbackEndpoint(new Uri("http://127.0.0.1:50000/other")));
     }
 

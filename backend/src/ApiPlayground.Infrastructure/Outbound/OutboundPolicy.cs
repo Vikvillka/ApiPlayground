@@ -14,7 +14,7 @@ public sealed class OutboundPolicy
     }
 
     internal bool IsValid => _testEndpoint is null ||
-        IPAddress.IsLoopback(_testEndpoint.Address) && _testEndpoint.Port is > 49151 and <= 65535;
+        IPAddress.IsLoopback(_testEndpoint.Address) && _testEndpoint.Port is > 32767 and <= 65535;
     internal IPAddress? TestAddress => _testEndpoint?.Address;
 
     public static TimeSpan ConnectTimeout { get; } = TimeSpan.FromSeconds(5);
@@ -29,7 +29,7 @@ public sealed class OutboundPolicy
         ArgumentNullException.ThrowIfNull(endpoint);
         if (!endpoint.IsAbsoluteUri || endpoint.Scheme != Uri.UriSchemeHttp ||
             !IPAddress.TryParse(endpoint.Host, out var address) || !IPAddress.IsLoopback(address) ||
-            endpoint.Port is <= 49151 or > 65535 || endpoint.AbsolutePath != "/" || endpoint.UserInfo.Length != 0 || endpoint.Query.Length != 0 || endpoint.Fragment.Length != 0)
+            endpoint.Port is <= 32767 or > 65535 || endpoint.AbsolutePath != "/" || endpoint.UserInfo.Length != 0 || endpoint.Query.Length != 0 || endpoint.Fragment.Length != 0)
         {
             throw new ArgumentException("The test policy requires an exact HTTP loopback origin on a dynamic/private port with no path or credentials.", nameof(endpoint));
         }

@@ -1,0 +1,125 @@
+# Backend refactoring stories in build order.
+# Existing identities 1–5 are retained; new entries start at 6. IDs are stable, not build order.
+next_id = 11
+
+[[entry]]
+id = 2
+type = "story"
+title = "Characterize the contract and migrate tracer dispatch to a controller"
+description = "Capture the current HTTP baseline and deliver the POST /api/tracer/get action as the first thin API-to-Application-to-Infrastructure controller path, preserving outbound and persistence smoke-check outcomes."
+verify = "TracerEndpointTests and TracerPersistenceSmokeCheckTests pass for valid and invalid dispatch, guard rejection, statuses, and response JSON; the attribute-routed action reaches the existing guarded executor."
+covers = ["CAP-2", "CAP-6", "CAP-8"]
+after = []
+hitl = false
+risk = "medium"
+notes = ["Risk: this establishes the HTTP pattern and touches a security-guarded action; focused guard, route, outbound, and smoke-check regression coverage is required."]
+
+[[entry]]
+id = 4
+type = "story"
+title = "Move persisted models into Domain and preserve persistence identity"
+description = "Inventory persisted models and meaningful rules; move only genuine application-owned types into Domain while Infrastructure retains EF mappings and migrations, preserving the full ApiPlayground.Api.Data.PlatformDbContext CLR identity and migration continuity."
+verify = "ArchitectureBoundaryTests, MigrationContinuityTests, and persistence integration tests pass against fresh and existing-history databases with no unapproved schema or data change."
+covers = ["CAP-4", "CAP-5"]
+after = [2]
+hitl = false
+risk = "high"
+plan_checkpoint = true
+notes = ["Risk: model ownership can affect EF identity, migration history, schema, and existing data. An independent reviewer compares context CLR identity, migration IDs/history, schema, and data-continuity evidence against the recorded baseline.", "Resolve Domain entity/rule inventory from repository evidence; do not invent business rules. Any schema change needs specific review and approval. Generate an approved migration only with dotnet ef migrations add; never hand-author migration files."]
+
+[[entry]]
+id = 6
+type = "story"
+title = "Refactor the guarded outbound path without weakening its policy"
+description = "Improve the cohesion and maintainability of the single guarded dispatch path while preserving production public-only policy, DNS validation and address pinning, redirect prohibition, deadlines, cancellation/dispatch semantics, response cap, and exact test-only loopback boundary."
+verify = "OutboundSafetyTests and ArchitectureBoundaryTests pass without weakening or bypassing any existing policy assertion."
+covers = ["CAP-9"]
+after = [2]
+hitl = false
+risk = "high"
+plan_checkpoint = true
+notes = ["Risk: a defect can weaken SSRF protections or dispatch accounting. An independent security reviewer inspects the transport diff and verifies the listed protections beyond the story's own tests."]
+
+[[entry]]
+id = 1
+type = "story"
+title = "Share request-header redaction"
+description = "Use one header-redaction transformation for request history and saved collections without changing sensitive-header or query-value redaction."
+verify = "RequestHistoryTests and RequestCollectionTests pass with existing sensitive-header and query-parameter cases preserved."
+covers = ["CAP-1"]
+after = []
+hitl = false
+risk = "low"
+notes = ["Risk: low; this is a narrow duplication removal protected by existing redaction regression tests."]
+
+[[entry]]
+id = 3
+type = "story"
+title = "Share only common request validation"
+description = "Extract only rules genuinely shared by tracer and collection request validation, keeping endpoint-specific rules and error mapping intact; preserve cancellation/failure and smoke-check outcomes while assessing safe placement improvements."
+verify = "TracerEndpointTests, RequestCollectionTests, and TracerPersistenceSmokeCheckTests pass with existing validation, cancellation, and failure outcomes unchanged."
+covers = ["CAP-3", "CAP-8"]
+after = [1, 2, 4]
+hitl = false
+risk = "medium"
+notes = ["Risk: workflow, validation, exception, and cancellation changes can alter observable results; preserve endpoint-specific behavior and test the existing outcomes."]
+
+[[entry]]
+id = 7
+type = "story"
+title = "Migrate remaining application routes to controllers and explicit contracts"
+description = "Move the remaining tracer, history, and collection application actions to attribute-routed controllers with justified request/response contracts and mappings, preserving middleware, guards, routes, methods, and statuses; keep GET /health as an infrastructure probe."
+verify = "TracerEndpointTests, HealthEndpointTests, and API contract tests pass for every application route and guard, with GET /health retaining its current response."
+covers = ["CAP-2", "CAP-6"]
+after = [2, 3]
+hitl = false
+risk = "medium"
+notes = ["Risk: route migration can affect binding, serialization, middleware, and request guards; preserve every existing application route and keep the infrastructure health probe unchanged."]
+
+[[entry]]
+id = 8
+type = "story"
+title = "Standardize validation and application errors on Problem Details"
+description = "Centralize validation, application-failure, and unexpected-error responses on RFC 9457 Problem Details with safe details and current HTTP statuses by default, updating frontend error consumers as needed; retain current guard, not-found, and rich tracer-failure bodies and statuses."
+verify = "API contract tests cover each in-scope and preserved error class, status, and sanitization; frontend error-display tests and frontend build pass."
+covers = ["CAP-3", "CAP-6"]
+after = [7]
+hitl = false
+risk = "medium"
+notes = ["Risk: error-body normalization is an approved intentional contract change requiring coordinated frontend compatibility; preserve statuses and the explicitly excluded guard, not-found, and rich tracer-failure bodies."]
+
+[[entry]]
+id = 9
+type = "story"
+title = "Organize DI and configuration and add safe NLog"
+description = "Clarify registration ownership, add only justified typed options/startup checks, and configure NLog if repository inspection confirms it is absent, using useful structured context without sensitive values."
+verify = "Startup/configuration tests, captured-log sensitivity checks, Release build, and backend tests pass; no secret, authorization/cookie header, sensitive query value, or credential appears in logs."
+covers = ["CAP-7", "CAP-8"]
+after = [8]
+hitl = false
+risk = "medium"
+notes = ["Risk: host startup and logging affect operations and sensitive-data handling; add only justified settings and prove captured logs exclude protected values."]
+
+[[entry]]
+id = 5
+type = "story"
+title = "Refactor sweep"
+description = "Apply cleanup-only changes supported by completed story plans and deferred review findings, without expanding scope or changing approved contracts."
+verify = "Focused suites for any sweep changes, Release build, full backend suite, and frontend tests pass with no unapproved contract or schema change."
+covers = ["CAP-1", "CAP-8"]
+after = [1, 2, 3, 4, 6, 7, 8, 9]
+hitl = false
+risk = "medium"
+notes = ["Risk: broad cleanup can accidentally expand scope; limit changes to completed-plan findings and run focused regression checks for every change."]
+
+[[entry]]
+id = 10
+type = "story"
+title = "Integrated contract, migration, and independent browser closeout"
+description = "Verify the integrated API/controller and frontend error contracts, persistence and migration continuity, architecture boundaries, outbound safety, and relevant independently run browser journey without changing CI scope."
+verify = "Release build, frontend build/unit tests, complete backend tests with APIPLAYGROUND_TEST_ADMIN_CONNECTION, migration-continuity, architecture and outbound-safety suites pass; when changed integration behavior warrants it, separately run npm run test:e2e. CI still excludes the Story 9 browser-host runner and has no dedicated Story 9 job."
+covers = ["CAP-1", "CAP-2", "CAP-3", "CAP-4", "CAP-5", "CAP-6", "CAP-7", "CAP-8", "CAP-9"]
+after = [5]
+hitl = false
+risk = "medium"
+notes = ["Risk: final integration spans API, frontend, persistence, and security; run the complete verification set with the required disposable PostgreSQL test administrator and keep browser E2E independent from CI."]

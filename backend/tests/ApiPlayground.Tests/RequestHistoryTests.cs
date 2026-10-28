@@ -28,6 +28,29 @@ public sealed class RequestHistoryTests
         Assert.Equal("{\"safe\":true}", snapshot.Body);
     }
 
+    [Fact]
+    public void Snapshot_redacts_all_sensitive_header_categories_case_insensitively()
+    {
+        var headers = new Dictionary<string, string>
+        {
+            ["AUTHORIZATION"] = "private",
+            ["pRoXy-AuThOrIzAtIoN"] = "private",
+            ["cOoKiE"] = "private",
+            ["sEt-CoOkIe"] = "private",
+            ["X-API-KEY"] = "private",
+            ["X-Access-TOKEN"] = "private",
+            ["X-Ordinary"] = "visible",
+        };
+        var request = new OutboundRequest(new Uri("https://example.test/"), "GET", headers);
+
+        var snapshot = RequestHistoryRedaction.Create(request, SuccessResult());
+
+        Assert.All(headers.Keys.Where(name => name != "X-Ordinary"), name => Assert.Equal(string.Empty, snapshot.Headers[name]));
+        Assert.Equal(headers.Keys.Where(name => name != "X-Ordinary"), snapshot.RedactedHeaders);
+        Assert.Equal("visible", snapshot.Headers["X-Ordinary"]);
+        Assert.DoesNotContain("X-Ordinary", snapshot.RedactedHeaders);
+    }
+
     [Theory]
     [InlineData(OutboundFailure.None, true)]
     [InlineData(OutboundFailure.Timeout, true)]

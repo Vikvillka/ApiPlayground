@@ -32,6 +32,27 @@ public static class RequestHistoryRedaction
     public static bool IsSensitiveQueryName(string name) =>
         ContainsAny(name, "token", "api-key", "apikey", "secret", "password");
 
+    public static (IReadOnlyDictionary<string, string> Headers, IReadOnlyList<string> RedactedHeaders)
+        SanitizeHeaders(IReadOnlyDictionary<string, string> headers)
+    {
+        var sanitizedHeaders = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+        var redactedHeaders = new List<string>();
+        foreach (var (name, value) in headers)
+        {
+            if (IsSensitiveHeader(name))
+            {
+                sanitizedHeaders[name] = string.Empty;
+                redactedHeaders.Add(name);
+            }
+            else
+            {
+                sanitizedHeaders[name] = value;
+            }
+        }
+
+        return (sanitizedHeaders, redactedHeaders);
+    }
+
     public static string SanitizeUrl(string url, out IReadOnlyList<string> redactedNames)
     {
         if (!Uri.TryCreate(url, UriKind.Absolute, out var uri))
@@ -45,20 +66,10 @@ public static class RequestHistoryRedaction
 
     public static RequestHistorySnapshot Create(OutboundRequest request, OutboundResult result, DateTimeOffset? now = null)
     {
-        var headers = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
-        var redacted = new List<string>();
-        foreach (var (name, value) in request.Headers ?? new Dictionary<string, string>())
-        {
-            if (IsSensitiveHeader(name))
-            {
-                headers[name] = string.Empty;
-                redacted.Add(name);
-            }
-            else headers[name] = value;
-        }
+        var (headers, redactedHeaders) = SanitizeHeaders(request.Headers ?? new Dictionary<string, string>());
 
         return new RequestHistorySnapshot(Guid.NewGuid(), now ?? DateTimeOffset.UtcNow, request.Method,
-            SanitizeUrl(request.Uri, out var redactedQueryParameters), redactedQueryParameters, headers, redacted,
+            SanitizeUrl(request.Uri, out var redactedQueryParameters), redactedQueryParameters, headers, redactedHeaders,
             request.Body.IsEmpty ? null : System.Text.Encoding.UTF8.GetString(request.Body.Span),
             result.Failure.ToString(), result.StatusCode, result.Elapsed.TotalMilliseconds);
     }

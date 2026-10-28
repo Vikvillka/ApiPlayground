@@ -68,20 +68,7 @@ public sealed class SaveRequestUseCase(IRequestCollectionStore store)
             command.Headers.Keys.Distinct(StringComparer.OrdinalIgnoreCase).Count() != command.Headers.Count)
             throw new ArgumentException("Enabled request header names must be unique and non-empty.");
 
-        var headers = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
-        var redactedHeaders = new List<string>();
-        foreach (var (name, value) in command.Headers)
-        {
-            if (RequestHistoryRedaction.IsSensitiveHeader(name))
-            {
-                headers[name] = string.Empty;
-                redactedHeaders.Add(name);
-            }
-            else
-            {
-                headers[name] = value;
-            }
-        }
+        var (headers, redactedHeaders) = RequestHistoryRedaction.SanitizeHeaders(command.Headers);
 
         var sanitizedUrl = RequestHistoryRedaction.SanitizeUrl(command.Url, out _);
         var snapshot = new SavedRequestSnapshot(Guid.NewGuid(), DateTimeOffset.UtcNow, command.CollectionId ?? Guid.Empty,

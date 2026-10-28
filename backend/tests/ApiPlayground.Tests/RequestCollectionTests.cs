@@ -31,6 +31,35 @@ public sealed class RequestCollectionTests
     }
 
     [Fact]
+    public async Task Save_redacts_all_sensitive_header_categories_case_insensitively_like_history()
+    {
+        var headers = new Dictionary<string, string>
+        {
+            ["AUTHORIZATION"] = "private",
+            ["pRoXy-AuThOrIzAtIoN"] = "private",
+            ["cOoKiE"] = "private",
+            ["sEt-CoOkIe"] = "private",
+            ["X-API-KEY"] = "private",
+            ["X-Access-TOKEN"] = "private",
+            ["X-Ordinary"] = "visible",
+        };
+        var useCase = new SaveRequestUseCase(new InMemoryCollectionStore());
+        var command = new SaveRequestCommand(null, "Reusable", "GET /", "GET", "https://example.test/", headers, null);
+
+        var saved = await useCase.SaveAsync(command);
+        var history = RequestHistoryRedaction.Create(
+            new OutboundRequest(new Uri(command.Url), command.Method, headers),
+            new OutboundResult(OutboundFailure.None, 200, TimeSpan.Zero,
+                new Dictionary<string, IReadOnlyList<string>>(), ReadOnlyMemory<byte>.Empty, DispatchStarted: true));
+
+        Assert.Equal(history.Headers, saved.Headers);
+        Assert.Equal(history.RedactedHeaders, saved.RedactedHeaders);
+        Assert.All(headers.Keys.Where(name => name != "X-Ordinary"), name => Assert.Equal(string.Empty, saved.Headers[name]));
+        Assert.Equal("visible", saved.Headers["X-Ordinary"]);
+        Assert.DoesNotContain("X-Ordinary", saved.RedactedHeaders);
+    }
+
+    [Fact]
     public async Task Save_use_case_rejects_ambiguous_or_invalid_requests_before_persistence()
     {
         var store = new InMemoryCollectionStore();

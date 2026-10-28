@@ -4,6 +4,7 @@ using System.Text;
 using ApiPlayground.Application.Outbound;
 using ApiPlayground.Infrastructure;
 using ApiPlayground.Infrastructure.Outbound;
+using Microsoft.AspNetCore.Http;
 using Microsoft.Extensions.DependencyInjection;
 using Xunit;
 
@@ -141,10 +142,36 @@ public sealed class OutboundSafetyTests
     }
 
     [Fact]
+    public async Task Caller_cancellation_during_dns_resolution_is_reported_as_cancelled_before_dispatch()
+    {
+        using var cancellation = new CancellationTokenSource(TimeSpan.FromMilliseconds(100));
+        var executor = new GuardedTargetHttpClient(
+            OutboundPolicy.PublicInternetOnly(),
+            async (_, token) =>
+            {
+                await Task.Delay(Timeout.InfiniteTimeSpan, token);
+                throw new InvalidOperationException("Unreachable after cancellation.");
+            },
+            connector: (_, _) => Task.FromException<Stream>(new InvalidOperationException("Connection must not be attempted.")));
+
+        var result = await executor.ExecuteAsync(new OutboundRequest(new Uri("http://dns-cancel.example.test/"), "GET"), cancellation.Token);
+
+        Assert.Equal(OutboundFailure.Cancelled, result.Failure);
+        Assert.False(result.DispatchStarted);
+    }
+
+    [Fact]
     public async Task Explicit_test_policy_allows_only_the_exact_loopback_endpoint_through_guard()
     {
         await using var server = await ControlledLoopbackServer.StartAsync();
-        var executor = CreateTestExecutor(OutboundPolicy.ForTestOnlyLoopbackEndpoint(server.BaseAddress, "echo.example.test"), server.BaseAddress);
+        var resolveCount = 0;
+        var executor = new GuardedTargetHttpClient(
+            OutboundPolicy.ForTestOnlyLoopbackEndpoint(server.BaseAddress, "echo.example.test"),
+            (_, _) =>
+            {
+                resolveCount++;
+                return Task.FromResult(new[] { IPAddress.Loopback });
+            });
         var targetUri = new Uri($"http://echo.example.test:{server.BaseAddress.Port}/echo");
         var result = await executor.ExecuteAsync(new OutboundRequest(targetUri, "GET"));
 
@@ -153,6 +180,7 @@ public sealed class OutboundSafetyTests
         Assert.Equal("controlled", Encoding.UTF8.GetString(result.Body.Span));
         var wrongPort = await executor.ExecuteAsync(new OutboundRequest(new Uri($"http://echo.example.test:{server.BaseAddress.Port + 1}/"), "GET"));
         Assert.Equal(OutboundFailure.PolicyRejected, wrongPort.Failure);
+        Assert.Equal(1, resolveCount);
     }
 
     [Fact]
@@ -197,6 +225,8 @@ public sealed class OutboundSafetyTests
     {
         await using var server = await ControlledLoopbackServer.StartAsync(async context =>
         {
+            context.Response.StatusCode = StatusCodes.Status429TooManyRequests;
+            context.Response.Headers["X-Target"] = "streamed-oversize";
             context.Response.ContentLength = null;
             var chunk = new byte[32 * 1024];
             for (var index = 0; index < 40 && !context.RequestAborted.IsCancellationRequested; index++)
@@ -206,6 +236,51 @@ public sealed class OutboundSafetyTests
         var result = await executor.ExecuteAsync(new OutboundRequest(new Uri($"http://large.example.test:{server.BaseAddress.Port}/large"), "GET"));
 
         Assert.Equal(OutboundFailure.ResponseTooLarge, result.Failure);
+        Assert.Equal(StatusCodes.Status429TooManyRequests, result.StatusCode);
+        Assert.Equal("streamed-oversize", Assert.Single(result.Headers["X-Target"]));
+        Assert.Empty(result.Body.ToArray());
+        Assert.True(result.DispatchStarted);
+    }
+
+    [Fact]
+    public async Task Declared_oversize_response_preserves_target_metadata_without_retaining_body()
+    {
+        await using var server = await ControlledLoopbackServer.StartAsync(async context =>
+        {
+            context.Response.StatusCode = StatusCodes.Status413PayloadTooLarge;
+            context.Response.Headers["X-Target"] = "declared-oversize";
+            context.Response.ContentLength = OutboundPolicy.MaximumResponseBytes + 1L;
+            await context.Response.Body.WriteAsync(new byte[OutboundPolicy.MaximumResponseBytes + 1]);
+        });
+        var executor = CreateTestExecutor(OutboundPolicy.ForTestOnlyLoopbackEndpoint(server.BaseAddress), server.BaseAddress);
+
+        var result = await executor.ExecuteAsync(new OutboundRequest(server.BaseAddress, "GET"));
+
+        Assert.Equal(OutboundFailure.ResponseTooLarge, result.Failure);
+        Assert.Equal(StatusCodes.Status413PayloadTooLarge, result.StatusCode);
+        Assert.Equal("declared-oversize", Assert.Single(result.Headers["X-Target"]));
+        Assert.Empty(result.Body.ToArray());
+        Assert.True(result.DispatchStarted);
+    }
+
+    [Fact]
+    public async Task Target_error_response_preserves_status_body_and_repeated_headers()
+    {
+        await using var server = await ControlledLoopbackServer.StartAsync(async context =>
+        {
+            context.Response.StatusCode = StatusCodes.Status422UnprocessableEntity;
+            context.Response.Headers.Append("X-Target-Repeat", "first");
+            context.Response.Headers.Append("X-Target-Repeat", "second");
+            await context.Response.WriteAsync("target error");
+        });
+        var executor = CreateTestExecutor(OutboundPolicy.ForTestOnlyLoopbackEndpoint(server.BaseAddress), server.BaseAddress);
+
+        var result = await executor.ExecuteAsync(new OutboundRequest(server.BaseAddress, "GET"));
+
+        Assert.Equal(OutboundFailure.None, result.Failure);
+        Assert.Equal(StatusCodes.Status422UnprocessableEntity, result.StatusCode);
+        Assert.Equal("target error", Encoding.UTF8.GetString(result.Body.Span));
+        Assert.Equal(new[] { "first", "second" }, result.Headers["X-Target-Repeat"]);
         Assert.True(result.DispatchStarted);
     }
 

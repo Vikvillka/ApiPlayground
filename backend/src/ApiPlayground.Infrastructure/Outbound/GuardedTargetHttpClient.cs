@@ -45,47 +45,83 @@ public sealed class GuardedTargetHttpClient : IOutboundRequestExecutor
 
         using var deadline = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
         deadline.CancelAfter(OutboundPolicy.TotalTimeout);
+        var (pinnedAddress, resolutionFailure) = await ResolveAndSelectAddressAsync(request.Uri, stopwatch, deadline.Token, cancellationToken).ConfigureAwait(false);
+        if (resolutionFailure is not null)
+            return resolutionFailure;
+
+        using var connectDeadline = new CancellationTokenSource(OutboundPolicy.ConnectTimeout);
+        var connectionDeadlineExpired = false;
+        using var handler = CreateGuardedHandler(
+            request.Uri,
+            pinnedAddress!,
+            deadline.Token,
+            cancellationToken,
+            connectDeadline.Token,
+            () => connectionDeadlineExpired = true);
+        using var client = new HttpClient(handler, disposeHandler: false) { Timeout = Timeout.InfiniteTimeSpan };
+        if (!TryCreateRequestMessage(request, out var createdMessage))
+            return Failed(OutboundFailure.PolicyRejected, stopwatch, "A request header or content type is invalid.");
+        using var message = createdMessage!;
+
+        return await DispatchAndReadResponseAsync(
+            client,
+            message,
+            stopwatch,
+            deadline.Token,
+            cancellationToken,
+            () => connectionDeadlineExpired).ConfigureAwait(false);
+    }
+
+    private async Task<(IPAddress? Address, OutboundResult? Failure)> ResolveAndSelectAddressAsync(
+        Uri uri,
+        Stopwatch stopwatch,
+        CancellationToken deadlineToken,
+        CancellationToken callerCancellationToken)
+    {
         IPAddress[] addresses;
         try
         {
-            if (IPAddress.TryParse(request.Uri.Host, out var literal))
-            {
+            if (IPAddress.TryParse(uri.Host, out var literal))
                 addresses = [literal];
-            }
             else
-            {
-                addresses = await _resolve(request.Uri.DnsSafeHost, deadline.Token).ConfigureAwait(false);
-            }
+                addresses = await _resolve(uri.DnsSafeHost, deadlineToken).ConfigureAwait(false);
         }
-        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        catch (OperationCanceledException) when (callerCancellationToken.IsCancellationRequested)
         {
-            return Failed(OutboundFailure.Cancelled, stopwatch, "The request was cancelled.");
+            return (null, Failed(OutboundFailure.Cancelled, stopwatch, "The request was cancelled."));
         }
         catch (OperationCanceledException)
         {
-            return Failed(OutboundFailure.Timeout, stopwatch, "The total request deadline expired during DNS resolution.");
+            return (null, Failed(OutboundFailure.Timeout, stopwatch, "The total request deadline expired during DNS resolution."));
         }
         catch (Exception ex) when (ex is HttpRequestException or SocketException or IOException or InvalidOperationException or ArgumentException or FormatException)
         {
             var diagnostic = ex is ArgumentException or FormatException
                 ? "Destination DNS resolution failed."
                 : "The outbound request failed: " + ex.GetType().Name;
-            return Failed(OutboundFailure.TransportFailure, stopwatch, diagnostic);
+            return (null, Failed(OutboundFailure.TransportFailure, stopwatch, diagnostic));
         }
 
-        if (addresses.Length == 0 || addresses.Any(address => !_policy.AllowsAddress(request.Uri, address)))
-            return Failed(OutboundFailure.PolicyRejected, stopwatch, "At least one destination address is not permitted.");
+        if (addresses.Length == 0 || addresses.Any(address => !_policy.AllowsAddress(uri, address)))
+            return (null, Failed(OutboundFailure.PolicyRejected, stopwatch, "At least one destination address is not permitted."));
 
-        var pinnedAddress = _policy.IsTestEndpoint(request.Uri)
+        var pinnedAddress = _policy.IsTestEndpoint(uri)
             ? _policy.TestAddress
-            : IPAddress.TryParse(request.Uri.Host, out var requestedAddress)
+            : IPAddress.TryParse(uri.Host, out var requestedAddress)
                 ? addresses.FirstOrDefault(address => address.AddressFamily == requestedAddress.AddressFamily)
                 : addresses.FirstOrDefault();
-        if (pinnedAddress is null)
-            return Failed(OutboundFailure.PolicyRejected, stopwatch, "No destination address is compatible with the requested URI.");
-        using var connectDeadline = new CancellationTokenSource(OutboundPolicy.ConnectTimeout);
-        var connectionDeadlineExpired = false;
-        using var handler = new SocketsHttpHandler
+        return pinnedAddress is null
+            ? (null, Failed(OutboundFailure.PolicyRejected, stopwatch, "No destination address is compatible with the requested URI."))
+            : (pinnedAddress, null);
+    }
+
+    private SocketsHttpHandler CreateGuardedHandler(
+        Uri requestedUri,
+        IPAddress pinnedAddress,
+        CancellationToken totalDeadlineToken,
+        CancellationToken callerCancellationToken,
+        CancellationToken connectDeadlineToken,
+        Action markConnectionDeadlineExpired) => new()
         {
             AllowAutoRedirect = false,
             UseProxy = false,
@@ -93,31 +129,35 @@ public sealed class GuardedTargetHttpClient : IOutboundRequestExecutor
             PooledConnectionLifetime = TimeSpan.Zero,
             ConnectCallback = async (context, token) =>
             {
-                if (!string.Equals(context.DnsEndPoint.Host, request.Uri.DnsSafeHost, StringComparison.OrdinalIgnoreCase) ||
-                    context.DnsEndPoint.Port != request.Uri.Port)
+                if (!string.Equals(context.DnsEndPoint.Host, requestedUri.DnsSafeHost, StringComparison.OrdinalIgnoreCase) ||
+                    context.DnsEndPoint.Port != requestedUri.Port)
                     throw new HttpRequestException("Unexpected destination endpoint.");
 
-                    using var linkedConnectDeadline = CancellationTokenSource.CreateLinkedTokenSource(token, connectDeadline.Token);
-                    try
-                    {
-                        return await _connect(new IPEndPoint(pinnedAddress, context.DnsEndPoint.Port), linkedConnectDeadline.Token).ConfigureAwait(false);
-                    }
-                    catch (OperationCanceledException) when (!deadline.IsCancellationRequested && !cancellationToken.IsCancellationRequested)
-                    {
-                        connectionDeadlineExpired = true;
-                        throw new TimeoutException("The outbound connection deadline expired.");
-                    }
+                using var linkedConnectDeadline = CancellationTokenSource.CreateLinkedTokenSource(token, connectDeadlineToken);
+                try
+                {
+                    return await _connect(new IPEndPoint(pinnedAddress, context.DnsEndPoint.Port), linkedConnectDeadline.Token).ConfigureAwait(false);
+                }
+                catch (OperationCanceledException) when (!totalDeadlineToken.IsCancellationRequested && !callerCancellationToken.IsCancellationRequested)
+                {
+                    markConnectionDeadlineExpired();
+                    throw new TimeoutException("The outbound connection deadline expired.");
+                }
             }
         };
-        using var client = new HttpClient(handler, disposeHandler: false) { Timeout = Timeout.InfiniteTimeSpan };
-        if (!TryCreateRequestMessage(request, out var createdMessage))
-            return Failed(OutboundFailure.PolicyRejected, stopwatch, "A request header or content type is invalid.");
-        using var message = createdMessage!;
 
+    private static async Task<OutboundResult> DispatchAndReadResponseAsync(
+        HttpClient client,
+        HttpRequestMessage message,
+        Stopwatch stopwatch,
+        CancellationToken totalDeadlineToken,
+        CancellationToken callerCancellationToken,
+        Func<bool> connectionDeadlineExpired)
+    {
         var dispatchStarted = false;
         try
         {
-            using var linkedDeadline = CancellationTokenSource.CreateLinkedTokenSource(deadline.Token, cancellationToken);
+            using var linkedDeadline = CancellationTokenSource.CreateLinkedTokenSource(totalDeadlineToken, callerCancellationToken);
             // Crossing this boundary makes the attempt History-eligible; it does not prove remote receipt.
             dispatchStarted = true;
             using var response = await client.SendAsync(message, HttpCompletionOption.ResponseHeadersRead, linkedDeadline.Token).ConfigureAwait(false);
@@ -144,11 +184,11 @@ public sealed class GuardedTargetHttpClient : IOutboundRequestExecutor
             return new OutboundResult(OutboundFailure.None, (int)response.StatusCode, stopwatch.Elapsed,
                 new ReadOnlyDictionary<string, IReadOnlyList<string>>(headers), body.ToArray(), DispatchStarted: true);
         }
-        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        catch (OperationCanceledException) when (callerCancellationToken.IsCancellationRequested)
         {
             return Failed(OutboundFailure.Cancelled, stopwatch, "The request was cancelled.", dispatchStarted: dispatchStarted);
         }
-        catch (OperationCanceledException) when (connectionDeadlineExpired)
+        catch (OperationCanceledException) when (connectionDeadlineExpired())
         {
             return Failed(OutboundFailure.Timeout, stopwatch, "The outbound connection deadline expired.", dispatchStarted: dispatchStarted);
         }
@@ -158,7 +198,7 @@ public sealed class GuardedTargetHttpClient : IOutboundRequestExecutor
         }
         catch (Exception ex) when (ex is HttpRequestException or SocketException or IOException or InvalidOperationException or TimeoutException)
         {
-            if (connectionDeadlineExpired || ex is TimeoutException)
+            if (connectionDeadlineExpired() || ex is TimeoutException)
                 return Failed(OutboundFailure.Timeout, stopwatch, "The outbound connection deadline expired.", dispatchStarted: dispatchStarted);
             return Failed(OutboundFailure.TransportFailure, stopwatch, "The outbound request failed: " + ex.GetType().Name, dispatchStarted: dispatchStarted);
         }
@@ -166,6 +206,11 @@ public sealed class GuardedTargetHttpClient : IOutboundRequestExecutor
 
     private bool IsValidRequest(OutboundRequest request, out string reason)
     {
+        if (_policy.ClaimsTestHost(request.Uri) && !_policy.IsTestEndpoint(request.Uri))
+        {
+            reason = "The test destination does not match the exact approved scheme and port.";
+            return false;
+        }
         if (!request.Uri.IsAbsoluteUri || request.Uri.UserInfo.Length != 0 || request.Uri.Fragment.Length != 0 ||
             request.Uri.Scheme is not ("http" or "https"))
         {
@@ -175,11 +220,6 @@ public sealed class GuardedTargetHttpClient : IOutboundRequestExecutor
         if (request.Method is not ("GET" or "POST" or "PUT" or "PATCH" or "DELETE"))
         {
             reason = "Only GET, POST, PUT, PATCH, and DELETE methods are allowed.";
-            return false;
-        }
-        if (_policy.ClaimsTestHost(request.Uri) && !_policy.IsTestEndpoint(request.Uri))
-        {
-            reason = "The test destination does not match the exact approved scheme and port.";
             return false;
         }
         if (_policy.IsTestEndpoint(request.Uri))

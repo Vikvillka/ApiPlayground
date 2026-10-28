@@ -25,7 +25,7 @@ after = [2]
 hitl = false
 risk = "high"
 plan_checkpoint = true
-notes = ["Risk: model ownership can affect EF identity, migration history, schema, and existing data. An independent reviewer compares context CLR identity, migration IDs/history, schema, and data-continuity evidence against the recorded baseline.", "Resolve Domain entity/rule inventory from repository evidence; do not invent business rules. Any schema change needs specific review and approval. Generate an approved migration only with dotnet ef migrations add; never hand-author migration files."]
+notes = ["Risk: model ownership can affect EF identity, migration history, schema, and existing data. An independent reviewer compares context CLR identity, migration IDs/history, schema, and data-continuity evidence against the recorded baseline.", "Resolve Domain entity/rule inventory from repository evidence; do not invent business rules. Any schema change requires a specific approved refactoring need. Generate every EF migration with dotnet ef migrations add; never hand-author migration files."]
 
 [[entry]]
 id = 6

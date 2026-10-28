@@ -3,14 +3,14 @@ title: 'Characterize the contract and migrate tracer dispatch to a controller'
 type: 'refactor'
 ticket: '2'
 created: '2026-10-28'
-status: 'in-progress'
+status: 'built'
 baseline_revision: 'bc708d2cb01af9334876cc997c7b69caef5fd878'
 route: 'full'
 route_source: 'auto'
 risk: 'medium'
-review: ''
-review_source: ''
-lenses_ran: []
+review: 'quick'
+review_source: 'pinned'
+lenses_ran: ['quick']
 review_loop_iteration: 0
 context: []
 ---

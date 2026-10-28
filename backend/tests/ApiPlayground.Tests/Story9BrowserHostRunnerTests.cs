@@ -89,12 +89,14 @@ internal sealed class Story9BrowserApiHost(string appConnectionString, Uri targe
         builder.Services.AddInfrastructure(appConnectionString);
         builder.Services.AddGuardedOutbound(OutboundPolicy.ForTestOnlyLoopbackEndpoint(targetAddress));
         builder.Services.AddScoped<ITracerPersistenceSmokeCheck, PostgresTracerPersistenceSmokeCheck>();
+        builder.Services.AddControllers();
         builder.Services.AddScoped<GetTracerUseCase>();
         builder.Services.AddScoped<RequestHistoryUseCase>();
         builder.Services.AddScoped<SaveRequestUseCase>();
         var app = builder.Build();
         app.UseRequestGuard();
         app.MapTracerEndpoints();
+        app.MapControllers();
 
         await using (var scope = app.Services.CreateAsyncScope())
         {

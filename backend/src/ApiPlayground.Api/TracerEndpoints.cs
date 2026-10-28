@@ -1,7 +1,4 @@
-using System.Text;
-using System.Text.Json;
 using ApiPlayground.Application.Outbound;
-using ApiPlayground.Infrastructure.Outbound;
 
 namespace ApiPlayground.Api;
 
@@ -95,79 +92,6 @@ public static class TracerEndpoints
                 return Results.Problem("The request could not be saved. Your request is still available to retry.", statusCode: StatusCodes.Status503ServiceUnavailable);
             }
         }).WithMetadata(new TracerRequestGuardMetadata());
-        app.MapPost("/api/tracer/get", async (TracerRequest request, GetTracerUseCase useCase, CancellationToken cancellationToken) =>
-        {
-            if (string.IsNullOrWhiteSpace(request.Url) || request.Url.Length > 2048)
-                return Results.BadRequest(new { error = "Enter a URL to send a request." });
-            if (request.Method is not ("GET" or "POST" or "PUT" or "PATCH" or "DELETE"))
-                return Results.BadRequest(new { error = "Choose a supported HTTP method." });
-            if (!Uri.TryCreate(request.Url, UriKind.Absolute, out var uri) || uri.Scheme is not ("http" or "https") || uri.UserInfo.Length != 0 || uri.Fragment.Length != 0)
-                return Results.BadRequest(new { error = "Enter a valid absolute HTTP or HTTPS URL without credentials or fragments." });
-            if (request.Method is "GET" or "DELETE" && !string.IsNullOrWhiteSpace(request.Body))
-                return Results.BadRequest(new { error = "JSON bodies are only supported for POST, PUT, and PATCH." });
-            if (request.Body is { Length: > 0 } && !IsValidJson(request.Body))
-                return Results.BadRequest(new { error = "Enter a valid JSON body." });
-            if (request.Headers is not null && request.Headers.Keys.Distinct(StringComparer.OrdinalIgnoreCase).Count() != request.Headers.Count)
-                return Results.BadRequest(new { error = "Enabled request header names must be unique." });
-            if (request.Headers is not null && request.Headers.Any(header => string.IsNullOrWhiteSpace(header.Key) ||
-                header.Key.Equals("Host", StringComparison.OrdinalIgnoreCase) ||
-                header.Key.Equals("Content-Length", StringComparison.OrdinalIgnoreCase) ||
-                header.Key.Equals("Content-Type", StringComparison.OrdinalIgnoreCase)))
-                return Results.BadRequest(new { error = "Host, Content-Length, and Content-Type headers are managed by the request sender." });
-
-            var headers = request.Headers ?? new Dictionary<string, string>();
-            var contentType = string.IsNullOrWhiteSpace(request.Body) ? null : "application/json";
-            var outboundRequest = new OutboundRequest(uri, request.Method, headers,
-                string.IsNullOrWhiteSpace(request.Body) ? ReadOnlyMemory<byte>.Empty : Encoding.UTF8.GetBytes(request.Body), contentType);
-            var result = await useCase.ExecuteAsync(outboundRequest, cancellationToken);
-            if (result.Outbound is null)
-                return Results.BadRequest(new { error = result.Error });
-            if (!result.Outbound.Succeeded && result.Outbound.Failure != OutboundFailure.PolicyRejected)
-                return Results.Json(new
-                {
-                    failure = result.Outbound.Failure.ToString(), statusCode = result.Outbound.StatusCode,
-                    elapsedMilliseconds = result.Outbound.Elapsed.TotalMilliseconds, headers = result.Outbound.Headers,
-                    body = Encoding.UTF8.GetString(result.Outbound.Body.Span), persistenceVerified = result.PersistenceVerified,
-                    error = result.Error, requestSent = result.Outbound.DispatchStarted, historySaved = result.HistorySaved,
-                }, statusCode: result.Outbound.Failure switch
-                {
-                    OutboundFailure.Timeout => StatusCodes.Status504GatewayTimeout,
-                    OutboundFailure.Cancelled => 499,
-                    _ => StatusCodes.Status502BadGateway,
-                });
-
-            var httpStatus = result.Outbound.Failure switch
-            {
-                OutboundFailure.None => StatusCodes.Status200OK,
-                OutboundFailure.PolicyRejected => StatusCodes.Status403Forbidden,
-                _ => StatusCodes.Status200OK,
-            };
-            return Results.Json(new
-            {
-                failure = result.Outbound.Failure.ToString(),
-                statusCode = result.Outbound.StatusCode,
-                elapsedMilliseconds = result.Outbound.Elapsed.TotalMilliseconds,
-                headers = result.Outbound.Headers,
-                body = Encoding.UTF8.GetString(result.Outbound.Body.Span),
-                persistenceVerified = result.PersistenceVerified,
-                error = result.Error,
-                requestSent = result.Outbound.DispatchStarted,
-                historySaved = result.HistorySaved,
-            }, statusCode: httpStatus);
-        }).WithMetadata(new TracerRequestGuardMetadata());
-    }
-
-    private static bool IsValidJson(string body)
-    {
-        try
-        {
-            using var document = JsonDocument.Parse(body);
-            return true;
-        }
-        catch (JsonException)
-        {
-            return false;
-        }
     }
 
     private static object ToHistoryDto(RequestHistorySnapshot item) => new
@@ -203,7 +127,7 @@ public static class TracerEndpoints
     };
 }
 
-public sealed record TracerRequest(string Url, string Method = "GET", string? Body = null, Dictionary<string, string>? Headers = null);
 public sealed record SaveCollectionRequest(Guid? CollectionId, string? NewCollectionName, string Title, string Method, string Url,
     Dictionary<string, string>? Headers = null, string? Body = null);
-public sealed class TracerRequestGuardMetadata;
+[AttributeUsage(AttributeTargets.Class | AttributeTargets.Method)]
+public sealed class TracerRequestGuardMetadata : Attribute;

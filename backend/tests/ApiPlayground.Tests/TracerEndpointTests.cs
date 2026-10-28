@@ -89,6 +89,130 @@ public sealed class TracerEndpointTests
         Assert.Equal(0, executor.Calls);
     }
 
+    [Theory]
+    [InlineData("", "GET", "Enter a URL to send a request.")]
+    [InlineData("   ", "GET", "Enter a URL to send a request.")]
+    [InlineData("not-a-url", "GET", "Enter a valid absolute HTTP or HTTPS URL without credentials or fragments.")]
+    [InlineData("ftp://example.test/", "GET", "Enter a valid absolute HTTP or HTTPS URL without credentials or fragments.")]
+    [InlineData("https://user:pass@example.test/", "GET", "Enter a valid absolute HTTP or HTTPS URL without credentials or fragments.")]
+    [InlineData("https://example.test/#fragment", "GET", "Enter a valid absolute HTTP or HTTPS URL without credentials or fragments.")]
+    [InlineData("https://example.test/", "TRACE", "Choose a supported HTTP method.")]
+    [InlineData("https://example.test/", "POST", "Enter a valid JSON body.")]
+    public async Task Validation_preserves_existing_message_and_does_not_dispatch(string url, string method, string error)
+    {
+        var executor = new RecordingExecutor();
+        await using var factory = CreateFactory(executor);
+        using var request = CreateAllowedRequest(url);
+        request.Content = JsonContent.Create(new { url, method, body = "{invalid" });
+
+        using var response = await factory.CreateClient().SendAsync(request);
+        var payload = await response.Content.ReadFromJsonAsync<ErrorResponse>();
+
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+        Assert.Equal(error, payload?.Error);
+        Assert.Equal(0, executor.Calls);
+    }
+
+    [Theory]
+    [InlineData("")]
+    [InlineData("null")]
+    [InlineData("{")]
+    [InlineData("{\"url\":3}")]
+    [InlineData("{\"url\":\"https://example.test/\",\"method\":3}")]
+    public async Task Invalid_json_binding_returns_bodyless_bad_request_without_dispatch(string json)
+    {
+        var executor = new RecordingExecutor();
+        await using var factory = CreateFactory(executor);
+        using var request = CreateAllowedRequest("https://example.test/");
+        request.Content = new StringContent(json, Encoding.UTF8, "application/json");
+
+        using var response = await factory.CreateClient().SendAsync(request);
+        var body = await response.Content.ReadAsByteArrayAsync();
+
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+        Assert.Empty(body);
+        Assert.Equal(0, executor.Calls);
+    }
+
+    [Fact]
+    public async Task Wrong_json_content_type_is_rejected_by_the_existing_request_guard()
+    {
+        var executor = new RecordingExecutor();
+        await using var factory = CreateFactory(executor);
+        using var request = CreateAllowedRequest("https://example.test/");
+        request.Content = new StringContent("{\"url\":\"https://example.test/\"}", Encoding.UTF8, "application/problem+json");
+
+        using var response = await factory.CreateClient().SendAsync(request);
+        var body = await response.Content.ReadAsByteArrayAsync();
+
+        Assert.Equal(HttpStatusCode.Forbidden, response.StatusCode);
+        Assert.NotEmpty(body);
+        Assert.Equal(0, executor.Calls);
+    }
+
+    [Theory]
+    [InlineData(OutboundFailure.Timeout, 504)]
+    [InlineData(OutboundFailure.TransportFailure, 502)]
+    [InlineData(OutboundFailure.ResponseTooLarge, 502)]
+    [InlineData(OutboundFailure.Cancelled, 499)]
+    public async Task Outbound_failures_keep_their_status_and_rich_result_fields(OutboundFailure failure, int statusCode)
+    {
+        var outbound = new OutboundResult(failure, null, TimeSpan.FromMilliseconds(12),
+            new Dictionary<string, IReadOnlyList<string>> { ["X-Test"] = ["value"] },
+            Encoding.UTF8.GetBytes("partial"), "outbound diagnostic", DispatchStarted: true);
+        await using var factory = CreateFactory(new FixedResultExecutor(outbound));
+        using var request = CreateAllowedRequest("https://example.test/");
+
+        using var response = await factory.CreateClient().SendAsync(request);
+        var payload = await response.Content.ReadFromJsonAsync<TracerResponse>();
+
+        Assert.Equal((HttpStatusCode)statusCode, response.StatusCode);
+        Assert.NotNull(payload);
+        Assert.Equal(failure.ToString(), payload.Failure);
+        Assert.Equal("partial", payload.Body);
+        Assert.Equal(new[] { "value" }, payload.Headers["X-Test"]);
+        Assert.Equal("outbound diagnostic", payload.Error);
+        Assert.True(payload.RequestSent);
+        Assert.False(payload.PersistenceVerified);
+    }
+
+    [Theory]
+    [InlineData(true, true, null)]
+    [InlineData(false, true, "local persistence check failed")]
+    [InlineData(true, false, "History entry was not saved")]
+    public async Task Persistence_and_history_outcomes_do_not_replace_a_successful_dispatch(
+        bool persistenceVerified, bool historySaveSucceeds, string? expectedError)
+    {
+        var executor = new FixedResultExecutor(new OutboundResult(OutboundFailure.None, 201, TimeSpan.FromMilliseconds(8),
+            new Dictionary<string, IReadOnlyList<string>>(), Encoding.UTF8.GetBytes("created"), DispatchStarted: true));
+        var factory = new WebApplicationFactory<Program>().WithWebHostBuilder(builder => builder.ConfigureTestServices(services =>
+        {
+            services.RemoveAll<IOutboundRequestExecutor>();
+            services.AddSingleton<IOutboundRequestExecutor>(executor);
+            services.RemoveAll<ITracerPersistenceSmokeCheck>();
+            services.AddSingleton<ITracerPersistenceSmokeCheck>(new FixedPersistenceCheck(persistenceVerified));
+            services.RemoveAll<IRequestHistoryStore>();
+            services.AddSingleton<IRequestHistoryStore>(historySaveSucceeds ? new InMemoryHistoryStore() : new FailingHistoryStore());
+        }));
+        await using var ownedFactory = factory;
+        using var request = CreateAllowedRequest("https://example.test/");
+
+        using var response = await factory.CreateClient().SendAsync(request);
+        var payload = await response.Content.ReadFromJsonAsync<TracerResponse>();
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        Assert.NotNull(payload);
+        Assert.Equal("None", payload.Failure);
+        Assert.Equal(201, payload.StatusCode);
+        Assert.Equal("created", payload.Body);
+        Assert.Equal(persistenceVerified, payload.PersistenceVerified);
+        Assert.Equal(historySaveSucceeds, payload.HistorySaved);
+        if (expectedError is null)
+            Assert.Null(payload.Error);
+        else
+            Assert.Contains(expectedError, payload.Error);
+    }
+
     [Fact]
     public async Task Oversized_body_is_rejected_before_dispatch()
     {
@@ -208,6 +332,7 @@ public sealed class TracerEndpointTests
             Assert.Equal("controlled tracer response", payload.Body);
             Assert.True(payload.PersistenceVerified);
             Assert.True(payload.RequestSent);
+            Assert.True(payload.HistorySaved);
             using var historyRequest = CreateAllowedRequest(target.BaseAddress.ToString(), HttpMethod.Get, "/api/tracer/history");
             using var historyResponse = await factory.CreateClient().SendAsync(historyRequest);
             var history = await historyResponse.Content.ReadFromJsonAsync<HistoryDto[]>();
@@ -444,7 +569,7 @@ public sealed class TracerEndpointTests
         }
     }
 
-    private static WebApplicationFactory<Program> CreateFactory(RecordingExecutor executor) =>
+    private static WebApplicationFactory<Program> CreateFactory(IOutboundRequestExecutor executor) =>
         new WebApplicationFactory<Program>().WithWebHostBuilder(builder => builder.ConfigureTestServices(services =>
         {
             services.RemoveAll<IOutboundRequestExecutor>();
@@ -475,6 +600,21 @@ public sealed class TracerEndpointTests
     private sealed class SuccessfulPersistenceCheck : ITracerPersistenceSmokeCheck
     {
         public Task<bool> VerifyRoundTripAsync(CancellationToken cancellationToken = default) => Task.FromResult(true);
+    }
+
+    private sealed class FixedPersistenceCheck(bool verified) : ITracerPersistenceSmokeCheck
+    {
+        public Task<bool> VerifyRoundTripAsync(CancellationToken cancellationToken = default) => Task.FromResult(verified);
+    }
+
+    private sealed class FailingHistoryStore : IRequestHistoryStore
+    {
+        public Task SaveAsync(RequestHistorySnapshot snapshot, CancellationToken cancellationToken = default) =>
+            throw new InvalidOperationException("storage unavailable");
+        public Task<IReadOnlyList<RequestHistorySnapshot>> ListAsync(CancellationToken cancellationToken = default) =>
+            Task.FromResult<IReadOnlyList<RequestHistorySnapshot>>([]);
+        public Task<RequestHistorySnapshot?> FindAsync(Guid id, CancellationToken cancellationToken = default) =>
+            Task.FromResult<RequestHistorySnapshot?>(null);
     }
 
     private sealed class InMemoryHistoryStore : IRequestHistoryStore
@@ -522,7 +662,10 @@ public sealed class TracerEndpointTests
     }
 
     private sealed record TracerResponse(string Failure, int? StatusCode, double ElapsedMilliseconds,
-        Dictionary<string, string[]> Headers, string Body, bool PersistenceVerified, string? Error, bool RequestSent);
+        Dictionary<string, string[]> Headers, string Body, bool PersistenceVerified, string? Error, bool RequestSent,
+        bool HistorySaved);
+
+    private sealed record ErrorResponse(string Error);
 
     private sealed record HistoryDto(Guid Id, string Url, string[] RedactedQueryParameters);
     private sealed record SavedRequestDto(Guid Id, string Title, HeaderDto[] Headers);

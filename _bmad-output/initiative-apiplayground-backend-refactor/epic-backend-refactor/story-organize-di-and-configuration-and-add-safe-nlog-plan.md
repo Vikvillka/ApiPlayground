@@ -3,7 +3,7 @@ title: 'Organize DI and configuration and add safe NLog'
 type: 'refactor'
 ticket: '9'
 created: '2026-10-29'
-status: 'in-review'
+status: done
 baseline_revision: '2188e670f3986623e2076ae68a2357e458af2e0b'
 route: 'full'
 route_source: 'auto'

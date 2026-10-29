@@ -1,5 +1,6 @@
 import { makeAutoObservable, runInAction } from "mobx";
 import { saveTracerRequest } from "../api/tracerApi";
+import type { RequestCollection } from "../tracer";
 import { defaultSaveTitle, errorMessage } from "../request/requestHelpers";
 import type { RequestEditorStore } from "./RequestEditorStore";
 import type { HistoryStore } from "./HistoryStore";
@@ -47,15 +48,24 @@ export class SaveRequestStore {
 
   async openDialog(): Promise<void> {
     if (!this.editor.canSave) return;
+    // Visible state is set synchronously so the dialog appears on the same tick as the click.
+    this.title = defaultSaveTitle(this.editor.method, this.editor.finalUrl);
+    this.newCollectionName = "";
+    this.error = null;
+    this.open = true;
+    if (this.history.collectionsLoaded) {
+      this.applyCollectionDefaults(this.history.collections);
+      return;
+    }
     const available = await this.history.ensureCollections();
     runInAction(() => {
-      this.title = defaultSaveTitle(this.editor.method, this.editor.finalUrl);
-      this.collectionId = available[0]?.id ?? "";
-      this.createCollection = available.length === 0;
-      this.newCollectionName = "";
-      this.error = null;
-      this.open = true;
+      if (this.open) this.applyCollectionDefaults(available);
     });
+  }
+
+  private applyCollectionDefaults(available: RequestCollection[]): void {
+    this.collectionId = available[0]?.id ?? "";
+    this.createCollection = available.length === 0;
   }
 
   close(): void {

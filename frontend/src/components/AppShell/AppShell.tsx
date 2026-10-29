@@ -10,9 +10,11 @@ type AppShellProps = {
 export function AppShell({ sidebar, children }: AppShellProps) {
   return (
     <Box sx={appShellStyles.root}>
-      <Box component="aside" sx={appShellStyles.sidebar}>
-        {sidebar}
-      </Box>
+      {sidebar && (
+        <Box component="aside" sx={appShellStyles.sidebar}>
+          {sidebar}
+        </Box>
+      )}
       <Box component="main" sx={appShellStyles.main}>
         {children}
       </Box>

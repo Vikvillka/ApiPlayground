@@ -104,7 +104,7 @@ try {
     await waitFor(async () => {
       try { await (await import("node:fs/promises")).access(path.join(runnerDirectory, "ready.json")); return true; }
       catch { if (apiHost.exitCode !== null) await waitExit(apiHost); return false; }
-    }, "Story 9 API host readiness");
+    }, "Story 9 API host readiness", 120_000);
     const fs = await import("node:fs/promises");
     const ready = JSON.parse(await fs.readFile(path.join(runnerDirectory, "ready.json"), "utf8")) as { targetUrl: string };
 

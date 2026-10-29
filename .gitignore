@@ -64,3 +64,5 @@ Desktop.ini
 
 *.user.toml
 frontend/test-results/
+# Local reference screenshot
+/image.png

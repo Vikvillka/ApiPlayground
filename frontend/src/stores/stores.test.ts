@@ -5,7 +5,7 @@ import {
   saveTracerRequest,
   sendTracerRequest,
 } from "../api/tracerApi";
-import type { HistoryItem, RequestCollection, TracerResponse } from "../tracer";
+import type { HistoryItem, RequestCollection, TracerResponse } from "../api/types";
 import { RootStore } from "./RootStore";
 
 vi.mock("../api/tracerApi", () => ({

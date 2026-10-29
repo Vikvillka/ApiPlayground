@@ -1,6 +1,6 @@
 import { makeAutoObservable, runInAction } from "mobx";
 import { sendTracerRequest } from "../api/tracerApi";
-import type { TracerResponse } from "../tracer";
+import type { TracerResponse } from "../api/types";
 import { errorMessage, type ResponseTab } from "../request/requestHelpers";
 import type { RequestEditorStore } from "./RequestEditorStore";
 import type { HistoryStore } from "./HistoryStore";

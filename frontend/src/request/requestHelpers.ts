@@ -1,4 +1,4 @@
-import type { TracerRequest } from "../tracer";
+import type { TracerRequest } from "../api/types";
 
 export type RequestMethod = TracerRequest["method"];
 export type RequestTab = "Params" | "Headers" | "Body";

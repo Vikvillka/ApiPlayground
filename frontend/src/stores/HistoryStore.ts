@@ -1,6 +1,6 @@
 import { makeAutoObservable, runInAction } from "mobx";
 import { getTracerCollections, getTracerHistory } from "../api/tracerApi";
-import type { HistoryItem, RequestCollection } from "../tracer";
+import type { HistoryItem, RequestCollection } from "../api/types";
 import { errorMessage } from "../request/requestHelpers";
 
 export class HistoryStore {

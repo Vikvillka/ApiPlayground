@@ -5,11 +5,10 @@ import type {
   SavedRequest,
   TracerRequest,
   TracerResponse,
-} from "../tracer";
+} from "./types";
 import { apiFetch, messageFrom } from "./apiClient";
 
 // The tracer endpoints: same URLs, methods, and headers as the previous tracer.ts client.
-// Types are imported from tracer.ts until the migration close-out story moves them here.
 
 function isTracerResponse(body: unknown): body is TracerResponse {
   return typeof body === "object" && body !== null && "failure" in body;

@@ -13,7 +13,7 @@ import {
   type RequestTab,
   type RequestValidation,
 } from "../request/requestHelpers";
-import type { TracerRequest } from "../tracer";
+import type { TracerRequest } from "../api/types";
 
 export type RequestSource = {
   url: string;

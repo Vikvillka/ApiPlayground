@@ -35,9 +35,6 @@ public interface IRequestCollectionStore
 
 public sealed class SaveRequestUseCase(IRequestCollectionStore store)
 {
-    private static readonly HashSet<string> SupportedMethods = new(StringComparer.Ordinal)
-        { "GET", "POST", "PUT", "PATCH", "DELETE" };
-
     public Task<IReadOnlyList<RequestCollectionSnapshot>> ListAsync(CancellationToken cancellationToken = default) =>
         store.ListAsync(cancellationToken);
 
@@ -51,11 +48,10 @@ public sealed class SaveRequestUseCase(IRequestCollectionStore store)
         if (command.NewCollectionName is { } collectionName &&
             (string.IsNullOrWhiteSpace(collectionName) || collectionName.Length > 80))
             throw new ArgumentException("Enter a collection name of 1 to 80 characters.");
-        if (!SupportedMethods.Contains(command.Method))
+        if (!RequestValidation.IsSupportedMethod(command.Method))
             throw new ArgumentException("Choose a supported HTTP method.");
         if (string.IsNullOrWhiteSpace(command.Url) || command.Url.Length > 2048 ||
-            !Uri.TryCreate(command.Url, UriKind.Absolute, out var uri) || uri.Scheme is not ("http" or "https") ||
-            uri.UserInfo.Length != 0 || uri.Fragment.Length != 0)
+            !RequestValidation.TryCreateHttpUri(command.Url, out _))
             throw new ArgumentException("Enter a valid absolute HTTP or HTTPS URL within the 2048 character limit.");
         if (command.Body is { Length: > 0 } && command.Method is ("GET" or "DELETE"))
             throw new ArgumentException("JSON bodies are only supported for POST, PUT, and PATCH.");
@@ -65,7 +61,7 @@ public sealed class SaveRequestUseCase(IRequestCollectionStore store)
             catch (System.Text.Json.JsonException) { throw new ArgumentException("Enter a valid JSON body."); }
         }
         if (command.Headers.Keys.Any(string.IsNullOrWhiteSpace) ||
-            command.Headers.Keys.Distinct(StringComparer.OrdinalIgnoreCase).Count() != command.Headers.Count)
+            RequestValidation.HasDuplicateHeaderNames(command.Headers.Keys))
             throw new ArgumentException("Enabled request header names must be unique and non-empty.");
 
         var (headers, redactedHeaders) = RequestHistoryRedaction.SanitizeHeaders(command.Headers);

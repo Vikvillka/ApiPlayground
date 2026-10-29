@@ -74,6 +74,97 @@ public sealed class RequestCollectionTests
         Assert.Empty(store.Collections);
     }
 
+    [Theory]
+    [InlineData("TRACE")]
+    [InlineData("get")]
+    public async Task Save_rejects_unsupported_or_nonuppercase_methods_with_the_existing_message(string method)
+    {
+        var store = new InMemoryCollectionStore();
+        var useCase = new SaveRequestUseCase(store);
+        var command = new SaveRequestCommand(null, "Requests", "request", method, "https://example.test/",
+            new Dictionary<string, string>(), null);
+
+        var error = await Assert.ThrowsAsync<ArgumentException>(() => useCase.SaveAsync(command));
+
+        Assert.Equal("Choose a supported HTTP method.", error.Message);
+        Assert.Empty(store.Collections);
+    }
+
+    [Theory]
+    [InlineData("")]
+    [InlineData("ftp://example.test/")]
+    [InlineData("https://user:pass@example.test/")]
+    [InlineData("https://example.test/#fragment")]
+    public async Task Save_rejects_urls_outside_common_http_uri_shape_with_existing_message(string url)
+    {
+        var store = new InMemoryCollectionStore();
+        var useCase = new SaveRequestUseCase(store);
+        var command = new SaveRequestCommand(null, "Requests", "request", "GET", url,
+            new Dictionary<string, string>(), null);
+
+        var error = await Assert.ThrowsAsync<ArgumentException>(() => useCase.SaveAsync(command));
+
+        Assert.Equal("Enter a valid absolute HTTP or HTTPS URL within the 2048 character limit.", error.Message);
+        Assert.Empty(store.Collections);
+    }
+
+    [Theory]
+    [InlineData("GET")]
+    [InlineData("POST")]
+    [InlineData("PUT")]
+    [InlineData("PATCH")]
+    [InlineData("DELETE")]
+    public async Task Save_accepts_each_exact_supported_method(string method)
+    {
+        var store = new InMemoryCollectionStore();
+        var useCase = new SaveRequestUseCase(store);
+        var command = new SaveRequestCommand(null, "Requests", "request", method, "https://example.test/",
+            new Dictionary<string, string>(), null);
+
+        var saved = await useCase.SaveAsync(command);
+
+        Assert.Equal(method, saved.Method);
+        Assert.Single(store.Collections);
+    }
+
+    [Fact]
+    public async Task Save_preserves_whitespace_body_as_absent_and_rejects_blank_or_duplicate_headers_before_persistence()
+    {
+        var store = new InMemoryCollectionStore();
+        var useCase = new SaveRequestUseCase(store);
+        var valid = new SaveRequestCommand(null, "Requests", "POST /", "POST", "https://example.test/",
+            new Dictionary<string, string>(), "   ");
+
+        var saved = await useCase.SaveAsync(valid);
+
+        Assert.Null(saved.Body);
+        var blankHeader = valid with { Headers = new Dictionary<string, string> { [" "] = "value" } };
+        await Assert.ThrowsAsync<ArgumentException>(() => useCase.SaveAsync(blankHeader));
+        var duplicateHeaders = new Dictionary<string, string> { ["X-Example"] = "one", ["x-example"] = "two" };
+        var duplicateError = await Assert.ThrowsAsync<ArgumentException>(() =>
+            useCase.SaveAsync(valid with { Headers = duplicateHeaders }));
+        Assert.Equal("Enabled request header names must be unique and non-empty.", duplicateError.Message);
+        var getWhitespaceBodyError = await Assert.ThrowsAsync<ArgumentException>(() =>
+            useCase.SaveAsync(valid with { Method = "GET" }));
+        Assert.Equal("JSON bodies are only supported for POST, PUT, and PATCH.", getWhitespaceBodyError.Message);
+        Assert.Single(store.Collections);
+        Assert.Single(Assert.Single(store.Collections).Requests);
+    }
+
+    [Fact]
+    public async Task Save_keeps_method_validation_ahead_of_url_validation()
+    {
+        var store = new InMemoryCollectionStore();
+        var useCase = new SaveRequestUseCase(store);
+        var command = new SaveRequestCommand(null, "Requests", "GET /", "trace", "not-a-url",
+            new Dictionary<string, string>(), null);
+
+        var error = await Assert.ThrowsAsync<ArgumentException>(() => useCase.SaveAsync(command));
+
+        Assert.Equal("Choose a supported HTTP method.", error.Message);
+        Assert.Empty(store.Collections);
+    }
+
     [Fact]
     public async Task Postgres_save_survives_new_context_and_rolls_back_inline_collection_on_failure()
     {

@@ -30,15 +30,15 @@ public sealed class TracerRequestController(GetTracerUseCase useCase, IOptions<H
             return BadRequest();
         if (string.IsNullOrWhiteSpace(request.Url) || request.Url.Length > 2048)
             return BadRequest(new { error = "Enter a URL to send a request." });
-        if (request.Method is not ("GET" or "POST" or "PUT" or "PATCH" or "DELETE"))
+        if (!RequestValidation.IsSupportedMethod(request.Method))
             return BadRequest(new { error = "Choose a supported HTTP method." });
-        if (!Uri.TryCreate(request.Url, UriKind.Absolute, out var uri) || uri.Scheme is not ("http" or "https") || uri.UserInfo.Length != 0 || uri.Fragment.Length != 0)
+        if (!RequestValidation.TryCreateHttpUri(request.Url, out var uri))
             return BadRequest(new { error = "Enter a valid absolute HTTP or HTTPS URL without credentials or fragments." });
         if (request.Method is "GET" or "DELETE" && !string.IsNullOrWhiteSpace(request.Body))
             return BadRequest(new { error = "JSON bodies are only supported for POST, PUT, and PATCH." });
         if (request.Body is { Length: > 0 } && !IsValidJson(request.Body))
             return BadRequest(new { error = "Enter a valid JSON body." });
-        if (request.Headers is not null && request.Headers.Keys.Distinct(StringComparer.OrdinalIgnoreCase).Count() != request.Headers.Count)
+        if (request.Headers is not null && RequestValidation.HasDuplicateHeaderNames(request.Headers.Keys))
             return BadRequest(new { error = "Enabled request header names must be unique." });
         if (request.Headers is not null && request.Headers.Any(header => string.IsNullOrWhiteSpace(header.Key) ||
             header.Key.Equals("Host", StringComparison.OrdinalIgnoreCase) ||

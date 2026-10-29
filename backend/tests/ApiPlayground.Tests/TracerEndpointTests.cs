@@ -114,6 +114,72 @@ public sealed class TracerEndpointTests
     }
 
     [Theory]
+    [InlineData("GET")]
+    [InlineData("POST")]
+    [InlineData("PUT")]
+    [InlineData("PATCH")]
+    [InlineData("DELETE")]
+    public async Task Each_exact_supported_method_reaches_dispatch(string method)
+    {
+        var executor = new RecordingExecutor();
+        await using var factory = CreateFactory(executor);
+        using var request = CreateAllowedRequest("https://example.test/");
+        request.Content = JsonContent.Create(new { url = "https://example.test/", method });
+
+        using var response = await factory.CreateClient().SendAsync(request);
+
+        Assert.Equal(HttpStatusCode.Forbidden, response.StatusCode);
+        Assert.Equal(1, executor.Calls);
+    }
+
+    [Fact]
+    public async Task Validation_order_keeps_blank_url_before_method_and_method_before_url_shape()
+    {
+        var executor = new RecordingExecutor();
+        await using var factory = CreateFactory(executor);
+        var client = factory.CreateClient();
+
+        using var blankUrlRequest = CreateAllowedRequest(string.Empty);
+        blankUrlRequest.Content = JsonContent.Create(new { url = string.Empty, method = "TRACE", body = "{" });
+        using var blankUrlResponse = await client.SendAsync(blankUrlRequest);
+        var blankUrlPayload = await blankUrlResponse.Content.ReadFromJsonAsync<ErrorResponse>();
+
+        using var invalidMethodRequest = CreateAllowedRequest("not-a-url");
+        invalidMethodRequest.Content = JsonContent.Create(new { url = "not-a-url", method = "TRACE", body = "{" });
+        using var invalidMethodResponse = await client.SendAsync(invalidMethodRequest);
+        var invalidMethodPayload = await invalidMethodResponse.Content.ReadFromJsonAsync<ErrorResponse>();
+
+        Assert.Equal("Enter a URL to send a request.", blankUrlPayload?.Error);
+        Assert.Equal("Choose a supported HTTP method.", invalidMethodPayload?.Error);
+        Assert.Equal(0, executor.Calls);
+    }
+
+    [Fact]
+    public async Task Tracer_keeps_whitespace_body_and_blank_header_validation_caller_specific()
+    {
+        var executor = new RecordingExecutor();
+        await using var factory = CreateFactory(executor);
+        using var whitespaceBodyRequest = CreateAllowedRequest("https://example.test/");
+        whitespaceBodyRequest.Content = JsonContent.Create(new { url = "https://example.test/", method = "POST", body = "   " });
+
+        using var whitespaceBodyResponse = await factory.CreateClient().SendAsync(whitespaceBodyRequest);
+        var bodyError = await whitespaceBodyResponse.Content.ReadFromJsonAsync<ErrorResponse>();
+
+        using var blankHeaderRequest = CreateAllowedRequest("https://example.test/");
+        blankHeaderRequest.Content = JsonContent.Create(new
+        {
+            url = "https://example.test/",
+            headers = new Dictionary<string, string> { [" "] = "value" },
+        });
+        using var blankHeaderResponse = await factory.CreateClient().SendAsync(blankHeaderRequest);
+        var headerError = await blankHeaderResponse.Content.ReadFromJsonAsync<ErrorResponse>();
+
+        Assert.Equal("Enter a valid JSON body.", bodyError?.Error);
+        Assert.Equal("Host, Content-Length, and Content-Type headers are managed by the request sender.", headerError?.Error);
+        Assert.Equal(0, executor.Calls);
+    }
+
+    [Theory]
     [InlineData("")]
     [InlineData("null")]
     [InlineData("{")]
@@ -511,7 +577,10 @@ public sealed class TracerEndpointTests
 
         using var response = await factory.CreateClient().SendAsync(request);
 
+        var payload = await response.Content.ReadFromJsonAsync<ErrorResponse>();
+
         Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+        Assert.Equal("Enabled request header names must be unique.", payload?.Error);
         Assert.Equal(0, executor.Calls);
     }
 
@@ -526,6 +595,22 @@ public sealed class TracerEndpointTests
         using var response = await factory.CreateClient().SendAsync(request);
 
         Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+        Assert.Equal(0, executor.Calls);
+    }
+
+    [Fact]
+    public async Task Lowercase_supported_method_is_rejected_with_existing_message_before_dispatch()
+    {
+        var executor = new RecordingExecutor();
+        await using var factory = CreateFactory(executor);
+        using var request = CreateAllowedRequest("https://example.test/");
+        request.Content = JsonContent.Create(new { url = "https://example.test/", method = "get" });
+
+        using var response = await factory.CreateClient().SendAsync(request);
+        var payload = await response.Content.ReadFromJsonAsync<ErrorResponse>();
+
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+        Assert.Equal("Choose a supported HTTP method.", payload?.Error);
         Assert.Equal(0, executor.Calls);
     }
 

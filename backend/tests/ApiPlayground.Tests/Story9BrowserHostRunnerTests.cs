@@ -86,7 +86,8 @@ internal sealed class Story9BrowserApiHost(string appConnectionString, Uri targe
             ApplicationName = typeof(Program).Assembly.FullName,
         });
         builder.WebHost.UseKestrel(options => options.ListenLocalhost(5000));
-        builder.Services.AddInfrastructure(appConnectionString);
+        builder.Configuration["ConnectionStrings:Postgres"] = appConnectionString;
+        builder.Services.AddInfrastructure(builder.Configuration);
         builder.Services.AddGuardedOutbound(OutboundPolicy.ForTestOnlyLoopbackEndpoint(targetAddress));
         builder.Services.AddScoped<ITracerPersistenceSmokeCheck, PostgresTracerPersistenceSmokeCheck>();
         builder.Services.AddControllers();

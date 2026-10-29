@@ -1,18 +1,33 @@
 using ApiPlayground.Api.Data;
 using ApiPlayground.Application.Outbound;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Options;
 using ApiPlayground.Infrastructure.Outbound;
 
 namespace ApiPlayground.Infrastructure;
 
 public static class DependencyInjection
 {
-    public static IServiceCollection AddInfrastructure(this IServiceCollection services, string? connectionString)
+    // Owns all persistence registration. The connection string is validated at host start, so a missing
+    // value stops startup before any request is served.
+    public static IServiceCollection AddInfrastructure(this IServiceCollection services, IConfiguration configuration)
     {
-        services.AddDbContext<PlatformDbContext>(options =>
-            options.UseNpgsql(connectionString, postgres =>
-                postgres.MigrationsAssembly(typeof(DependencyInjection).Assembly.FullName)));
+        ArgumentNullException.ThrowIfNull(services);
+        ArgumentNullException.ThrowIfNull(configuration);
+
+        services.AddOptions<PostgresOptions>()
+            .Configure(options => options.ConnectionString = configuration.GetConnectionString("Postgres") ?? string.Empty)
+            .Validate(options => !string.IsNullOrWhiteSpace(options.ConnectionString), PostgresOptions.ValidationMessage)
+            .ValidateOnStart();
+
+        services.AddDbContext<PlatformDbContext>((provider, options) =>
+        {
+            var postgres = provider.GetRequiredService<IOptions<PostgresOptions>>().Value;
+            options.UseNpgsql(postgres.ConnectionString, npgsql =>
+                npgsql.MigrationsAssembly(typeof(DependencyInjection).Assembly.FullName));
+        });
         services.AddScoped<IRequestHistoryStore, PostgresRequestHistoryStore>();
         services.AddScoped<IRequestCollectionStore, PostgresRequestCollectionStore>();
 

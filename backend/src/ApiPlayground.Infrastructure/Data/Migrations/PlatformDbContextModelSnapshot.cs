@@ -22,7 +22,7 @@ namespace ApiPlayground.Api.Data.Migrations
 
             NpgsqlModelBuilderExtensions.UseIdentityByDefaultColumns(modelBuilder);
 
-            modelBuilder.Entity("ApiPlayground.Api.Data.RequestCollectionEntity", b =>
+            modelBuilder.Entity("ApiPlayground.Domain.Requests.RequestCollectionEntity", b =>
                 {
                     b.Property<Guid>("Id")
                         .ValueGeneratedOnAdd()
@@ -43,7 +43,7 @@ namespace ApiPlayground.Api.Data.Migrations
                     b.ToTable("request_collections", (string)null);
                 });
 
-            modelBuilder.Entity("ApiPlayground.Api.Data.RequestHistoryEntity", b =>
+            modelBuilder.Entity("ApiPlayground.Domain.Requests.RequestHistoryEntity", b =>
                 {
                     b.Property<Guid>("Id")
                         .ValueGeneratedOnAdd()
@@ -68,7 +68,7 @@ namespace ApiPlayground.Api.Data.Migrations
                         .HasColumnType("character varying(40)")
                         .HasColumnName("failure");
 
-                    b.Property<string>("HeadersJson")
+                    b.Property<string>("Headers")
                         .IsRequired()
                         .HasColumnType("text")
                         .HasColumnName("headers_json");
@@ -79,12 +79,12 @@ namespace ApiPlayground.Api.Data.Migrations
                         .HasColumnType("character varying(8)")
                         .HasColumnName("method");
 
-                    b.Property<string>("RedactedHeadersJson")
+                    b.Property<string>("RedactedHeaders")
                         .IsRequired()
                         .HasColumnType("text")
                         .HasColumnName("redacted_headers_json");
 
-                    b.Property<string>("RedactedQueryParametersJson")
+                    b.Property<string>("RedactedQueryParameters")
                         .IsRequired()
                         .HasColumnType("text")
                         .HasColumnName("redacted_query_parameters_json");
@@ -106,7 +106,7 @@ namespace ApiPlayground.Api.Data.Migrations
                     b.ToTable("request_history", (string)null);
                 });
 
-            modelBuilder.Entity("ApiPlayground.Api.Data.SavedRequestEntity", b =>
+            modelBuilder.Entity("ApiPlayground.Domain.Requests.SavedRequestEntity", b =>
                 {
                     b.Property<Guid>("Id")
                         .ValueGeneratedOnAdd()
@@ -125,7 +125,7 @@ namespace ApiPlayground.Api.Data.Migrations
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("created_at");
 
-                    b.Property<string>("HeadersJson")
+                    b.Property<string>("Headers")
                         .IsRequired()
                         .HasColumnType("text")
                         .HasColumnName("headers_json");
@@ -136,7 +136,7 @@ namespace ApiPlayground.Api.Data.Migrations
                         .HasColumnType("character varying(8)")
                         .HasColumnName("method");
 
-                    b.Property<string>("RedactedHeadersJson")
+                    b.Property<string>("RedactedHeaders")
                         .IsRequired()
                         .HasColumnType("text")
                         .HasColumnName("redacted_headers_json");
@@ -160,9 +160,9 @@ namespace ApiPlayground.Api.Data.Migrations
                     b.ToTable("saved_requests", (string)null);
                 });
 
-            modelBuilder.Entity("ApiPlayground.Api.Data.SavedRequestEntity", b =>
+            modelBuilder.Entity("ApiPlayground.Domain.Requests.SavedRequestEntity", b =>
                 {
-                    b.HasOne("ApiPlayground.Api.Data.RequestCollectionEntity", "Collection")
+                    b.HasOne("ApiPlayground.Domain.Requests.RequestCollectionEntity", "Collection")
                         .WithMany("Requests")
                         .HasForeignKey("CollectionId")
                         .OnDelete(DeleteBehavior.Cascade)
@@ -171,7 +171,7 @@ namespace ApiPlayground.Api.Data.Migrations
                     b.Navigation("Collection");
                 });
 
-            modelBuilder.Entity("ApiPlayground.Api.Data.RequestCollectionEntity", b =>
+            modelBuilder.Entity("ApiPlayground.Domain.Requests.RequestCollectionEntity", b =>
                 {
                     b.Navigation("Requests");
                 });

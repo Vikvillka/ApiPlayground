@@ -10,6 +10,8 @@ public sealed class MigrationContinuityTests
     private const string InitialMigrationId = "20261018000000_InitialPlatformBaseline";
     private const string HistoryMigrationId = "20261023000000_RequestHistory";
     private const string CollectionsMigrationId = "20261025165909_RequestCollections";
+    private const string DomainRequestEntitiesMigrationId = "20261029125342_DomainRequestEntities";
+    private static readonly string[] ExpectedMigrationIds = [InitialMigrationId, HistoryMigrationId, CollectionsMigrationId, DomainRequestEntitiesMigrationId];
     private readonly string _adminConnectionString;
 
     public MigrationContinuityTests()
@@ -58,7 +60,7 @@ public sealed class MigrationContinuityTests
             await MigrateAsync(connectionString);
             var migrationIds = await ReadMigrationIdsAsync(connectionString);
 
-            Assert.Equal([InitialMigrationId, HistoryMigrationId, CollectionsMigrationId], migrationIds);
+            Assert.Equal(ExpectedMigrationIds, migrationIds);
             await using var connection = new NpgsqlConnection(connectionString);
             await connection.OpenAsync();
             await using var command = connection.CreateCommand();
@@ -75,7 +77,7 @@ public sealed class MigrationContinuityTests
             .Options;
         using var context = new ApiPlayground.Api.Data.PlatformDbContext(options);
 
-        Assert.Equal([InitialMigrationId, HistoryMigrationId, CollectionsMigrationId], context.Database.GetMigrations());
+        Assert.Equal(ExpectedMigrationIds, context.Database.GetMigrations());
     }
 
     [Fact]
@@ -96,7 +98,7 @@ public sealed class MigrationContinuityTests
             await MigrateAsync(connectionString);
             var migrationIds = await ReadMigrationIdsAsync(connectionString);
 
-            Assert.Equal([InitialMigrationId, HistoryMigrationId, CollectionsMigrationId], migrationIds);
+            Assert.Equal(ExpectedMigrationIds, migrationIds);
         });
     }
 
@@ -130,7 +132,7 @@ public sealed class MigrationContinuityTests
                     "ef database update --project src/ApiPlayground.Infrastructure/ApiPlayground.Infrastructure.csproj --startup-project src/ApiPlayground.Api/ApiPlayground.Api.csproj",
                     environment);
                 var initialMigrationIds = await ReadMigrationIdsAsync(connectionString);
-                Assert.Equal([InitialMigrationId, HistoryMigrationId, CollectionsMigrationId], initialMigrationIds);
+                Assert.Equal(ExpectedMigrationIds, initialMigrationIds);
                 AddTemporaryMigrationModel(copiedBackend);
                 await RunDotnetAsync(
                     copiedBackend,
@@ -162,11 +164,12 @@ public sealed class MigrationContinuityTests
                     environment);
 
                 var migrationIds = await ReadMigrationIdsAsync(connectionString);
-                Assert.Equal(4, migrationIds.Length);
+                Assert.Equal(5, migrationIds.Length);
                 Assert.Equal(InitialMigrationId, migrationIds[0]);
                 Assert.Equal(HistoryMigrationId, migrationIds[1]);
                 Assert.Equal(CollectionsMigrationId, migrationIds[2]);
-                Assert.Equal(generatedId, migrationIds[3]);
+                Assert.Equal(DomainRequestEntitiesMigrationId, migrationIds[3]);
+                Assert.Equal(generatedId, migrationIds[4]);
             }
             finally
             {
@@ -195,7 +198,58 @@ public sealed class MigrationContinuityTests
             await context.Database.MigrateAsync();
 
         var migrationIds = await ReadMigrationIdsAsync(database.AppConnectionString);
-        Assert.Equal([InitialMigrationId, HistoryMigrationId, CollectionsMigrationId], migrationIds);
+        Assert.Equal(ExpectedMigrationIds, migrationIds);
+    }
+
+    [Fact]
+    public async Task Existing_json_rows_load_into_typed_domain_entities_and_keep_their_stored_form()
+    {
+        await WithDisposableDatabase(async connectionString =>
+        {
+            await MigrateAsync(connectionString);
+            var id = Guid.NewGuid();
+            const string queryJson = "[\"token\"]";
+            const string redactedHeadersJson = "[\"authorization\"]";
+
+            await using (var connection = new NpgsqlConnection(connectionString))
+            {
+                await connection.OpenAsync();
+                await using var insert = connection.CreateCommand();
+                insert.CommandText = "INSERT INTO request_history (id, created_at, method, url, redacted_query_parameters_json, headers_json, redacted_headers_json, body, failure, status_code, elapsed_ms) "
+                    + "VALUES (@id, @createdAt, 'GET', 'https://example.test/', @query, @headers, @redacted, NULL, '', 200, 12.5)";
+                insert.Parameters.AddWithValue("id", id);
+                insert.Parameters.AddWithValue("createdAt", new DateTimeOffset(2026, 10, 1, 12, 0, 0, TimeSpan.Zero));
+                insert.Parameters.AddWithValue("query", queryJson);
+                insert.Parameters.AddWithValue("headers", "{\"X-Trace\":\"abc\"}");
+                insert.Parameters.AddWithValue("redacted", redactedHeadersJson);
+                Assert.Equal(1, await insert.ExecuteNonQueryAsync());
+            }
+
+            var options = new DbContextOptionsBuilder<ApiPlayground.Api.Data.PlatformDbContext>()
+                .UseNpgsql(connectionString, postgres => postgres.MigrationsAssembly("ApiPlayground.Infrastructure"))
+                .Options;
+            await using (var context = new ApiPlayground.Api.Data.PlatformDbContext(options))
+            {
+                var entity = await context.RequestHistory.SingleAsync(item => item.Id == id);
+                Assert.Equal(["token"], entity.RedactedQueryParameters);
+                Assert.Equal("abc", entity.Headers["X-Trace"]);
+                Assert.Equal(["authorization"], entity.RedactedHeaders);
+
+                entity.Headers["X-Other"] = "z";
+                await context.SaveChangesAsync();
+            }
+
+            await using var verifyConnection = new NpgsqlConnection(connectionString);
+            await verifyConnection.OpenAsync();
+            await using var command = verifyConnection.CreateCommand();
+            command.CommandText = "SELECT headers_json, redacted_headers_json, redacted_query_parameters_json FROM request_history WHERE id = @id";
+            command.Parameters.AddWithValue("id", id);
+            await using var reader = await command.ExecuteReaderAsync();
+            Assert.True(await reader.ReadAsync());
+            Assert.Equal("{\"X-Trace\":\"abc\",\"X-Other\":\"z\"}", reader.GetString(0));
+            Assert.Equal(redactedHeadersJson, reader.GetString(1));
+            Assert.Equal(queryJson, reader.GetString(2));
+        });
     }
 
     private static async Task MigrateAsync(string connectionString, string? migrationsAssembly = "ApiPlayground.Infrastructure")

@@ -1,9 +1,15 @@
+using System.Text.Json;
+using ApiPlayground.Domain.Requests;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.ChangeTracking;
+using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 
 namespace ApiPlayground.Api.Data;
 
 public sealed class PlatformDbContext(DbContextOptions<PlatformDbContext> options) : DbContext(options)
 {
+	private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web);
+
 	public DbSet<RequestHistoryEntity> RequestHistory => Set<RequestHistoryEntity>();
 	public DbSet<RequestCollectionEntity> RequestCollections => Set<RequestCollectionEntity>();
 	public DbSet<SavedRequestEntity> SavedRequests => Set<SavedRequestEntity>();
@@ -17,9 +23,12 @@ public sealed class PlatformDbContext(DbContextOptions<PlatformDbContext> option
 		history.Property(item => item.CreatedAt).HasColumnName("created_at").IsRequired();
 		history.Property(item => item.Method).HasColumnName("method").HasMaxLength(8).IsRequired();
 		history.Property(item => item.Url).HasColumnName("url").HasMaxLength(2048).IsRequired();
-		history.Property(item => item.RedactedQueryParametersJson).HasColumnName("redacted_query_parameters_json").IsRequired();
-		history.Property(item => item.HeadersJson).HasColumnName("headers_json").IsRequired();
-		history.Property(item => item.RedactedHeadersJson).HasColumnName("redacted_headers_json").IsRequired();
+		history.Property(item => item.RedactedQueryParameters).HasColumnName("redacted_query_parameters_json")
+			.HasConversion(JsonConverter<List<string>>(), JsonComparer<List<string>>()).IsRequired();
+		history.Property(item => item.Headers).HasColumnName("headers_json")
+			.HasConversion(JsonConverter<Dictionary<string, string>>(), JsonComparer<Dictionary<string, string>>()).IsRequired();
+		history.Property(item => item.RedactedHeaders).HasColumnName("redacted_headers_json")
+			.HasConversion(JsonConverter<List<string>>(), JsonComparer<List<string>>()).IsRequired();
 		history.Property(item => item.Body).HasColumnName("body");
 		history.Property(item => item.Failure).HasColumnName("failure").HasMaxLength(40).IsRequired();
 		history.Property(item => item.StatusCode).HasColumnName("status_code");
@@ -44,45 +53,21 @@ public sealed class PlatformDbContext(DbContextOptions<PlatformDbContext> option
 		savedRequest.Property(item => item.Title).HasColumnName("title").HasMaxLength(120).IsRequired();
 		savedRequest.Property(item => item.Method).HasColumnName("method").HasMaxLength(8).IsRequired();
 		savedRequest.Property(item => item.Url).HasColumnName("url").HasMaxLength(2048).IsRequired();
-		savedRequest.Property(item => item.HeadersJson).HasColumnName("headers_json").IsRequired();
-		savedRequest.Property(item => item.RedactedHeadersJson).HasColumnName("redacted_headers_json").IsRequired();
+		savedRequest.Property(item => item.Headers).HasColumnName("headers_json")
+			.HasConversion(JsonConverter<Dictionary<string, string>>(), JsonComparer<Dictionary<string, string>>()).IsRequired();
+		savedRequest.Property(item => item.RedactedHeaders).HasColumnName("redacted_headers_json")
+			.HasConversion(JsonConverter<List<string>>(), JsonComparer<List<string>>()).IsRequired();
 		savedRequest.Property(item => item.Body).HasColumnName("body");
 		savedRequest.HasIndex(item => new { item.CollectionId, item.CreatedAt, item.Id });
 	}
-}
 
-public sealed class RequestCollectionEntity
-{
-	public Guid Id { get; set; }
-	public string Name { get; set; } = string.Empty;
-	public List<SavedRequestEntity> Requests { get; set; } = [];
-}
+	// Typed Domain fields are stored in the existing JSON text columns; the serialized form is unchanged.
+	private static ValueConverter<T, string> JsonConverter<T>() where T : new() => new(
+		value => JsonSerializer.Serialize(value, JsonOptions),
+		json => JsonSerializer.Deserialize<T>(json, JsonOptions) ?? new T());
 
-public sealed class SavedRequestEntity
-{
-	public Guid Id { get; set; }
-	public DateTimeOffset CreatedAt { get; set; }
-	public Guid CollectionId { get; set; }
-	public RequestCollectionEntity Collection { get; set; } = null!;
-	public string Title { get; set; } = string.Empty;
-	public string Method { get; set; } = string.Empty;
-	public string Url { get; set; } = string.Empty;
-	public string HeadersJson { get; set; } = "{}";
-	public string RedactedHeadersJson { get; set; } = "[]";
-	public string? Body { get; set; }
-}
-
-public sealed class RequestHistoryEntity
-{
-	public Guid Id { get; set; }
-	public DateTimeOffset CreatedAt { get; set; }
-	public string Method { get; set; } = string.Empty;
-	public string Url { get; set; } = string.Empty;
-	public string RedactedQueryParametersJson { get; set; } = "[]";
-	public string HeadersJson { get; set; } = "{}";
-	public string RedactedHeadersJson { get; set; } = "[]";
-	public string? Body { get; set; }
-	public string Failure { get; set; } = string.Empty;
-	public int? StatusCode { get; set; }
-	public double ElapsedMilliseconds { get; set; }
+	private static ValueComparer<T> JsonComparer<T>() where T : new() => new(
+		(left, right) => JsonSerializer.Serialize(left, JsonOptions) == JsonSerializer.Serialize(right, JsonOptions),
+		value => JsonSerializer.Serialize(value, JsonOptions).GetHashCode(),
+		value => JsonSerializer.Deserialize<T>(JsonSerializer.Serialize(value, JsonOptions), JsonOptions) ?? new T());
 }

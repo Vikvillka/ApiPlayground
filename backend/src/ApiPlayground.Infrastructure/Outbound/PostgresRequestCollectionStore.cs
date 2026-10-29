@@ -1,14 +1,12 @@
-using System.Text.Json;
 using ApiPlayground.Api.Data;
 using ApiPlayground.Application.Outbound;
+using ApiPlayground.Domain.Requests;
 using Microsoft.EntityFrameworkCore;
 
 namespace ApiPlayground.Infrastructure.Outbound;
 
 public sealed class PostgresRequestCollectionStore(PlatformDbContext dbContext) : IRequestCollectionStore
 {
-    private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web);
-
     public async Task<IReadOnlyList<RequestCollectionSnapshot>> ListAsync(CancellationToken cancellationToken = default)
     {
         var collections = await dbContext.RequestCollections.AsNoTracking()
@@ -45,8 +43,8 @@ public sealed class PostgresRequestCollectionStore(PlatformDbContext dbContext) 
             Title = request.Title,
             Method = request.Method,
             Url = request.Url,
-            HeadersJson = JsonSerializer.Serialize(request.Headers, JsonOptions),
-            RedactedHeadersJson = JsonSerializer.Serialize(request.RedactedHeaders, JsonOptions),
+            Headers = new Dictionary<string, string>(request.Headers),
+            RedactedHeaders = new List<string>(request.RedactedHeaders),
             Body = request.Body,
         };
         dbContext.SavedRequests.Add(entity);
@@ -57,6 +55,5 @@ public sealed class PostgresRequestCollectionStore(PlatformDbContext dbContext) 
 
     private static SavedRequestSnapshot ToSnapshot(SavedRequestEntity entity, string collectionName) => new(
         entity.Id, entity.CreatedAt, entity.CollectionId, collectionName, entity.Title, entity.Method, entity.Url,
-        JsonSerializer.Deserialize<Dictionary<string, string>>(entity.HeadersJson, JsonOptions) ?? new(),
-        JsonSerializer.Deserialize<List<string>>(entity.RedactedHeadersJson, JsonOptions) ?? new(), entity.Body);
+        entity.Headers, entity.RedactedHeaders, entity.Body);
 }

@@ -25,6 +25,28 @@ public sealed class ArchitectureBoundaryTests
     }
 
     [Fact]
+    public void Domain_has_no_persistence_or_host_dependencies()
+    {
+        var domainRoot = Path.Combine(BackendRoot, "src", "ApiPlayground.Domain");
+        var packageReferences = XDocument.Load(Directory.EnumerateFiles(domainRoot, "*.csproj").Single())
+            .Descendants("PackageReference")
+            .Select(element => (string?)element.Attribute("Include") ?? string.Empty)
+            .ToArray();
+        Assert.Empty(packageReferences);
+
+        var forbiddenNamespaces = new[] { "Microsoft.EntityFrameworkCore", "Npgsql", "ApiPlayground.Infrastructure", "ApiPlayground.Api" };
+        var violations = Directory.EnumerateFiles(domainRoot, "*.cs", SearchOption.AllDirectories)
+            .Where(path => !path.Contains(Path.DirectorySeparatorChar + "obj" + Path.DirectorySeparatorChar, StringComparison.Ordinal)
+                && !path.Contains(Path.DirectorySeparatorChar + "bin" + Path.DirectorySeparatorChar, StringComparison.Ordinal))
+            .SelectMany(path => forbiddenNamespaces
+                .Where(name => File.ReadAllText(path).Contains(name, StringComparison.Ordinal))
+                .Select(name => $"{Path.GetRelativePath(BackendRoot, path)} references {name}"))
+            .ToArray();
+
+        Assert.True(violations.Length == 0, "Domain must not depend on persistence or host code: " + string.Join("; ", violations));
+    }
+
+    [Fact]
     public void Runtime_source_does_not_add_direct_target_dispatch()
     {
         var forbiddenPatterns = new[]

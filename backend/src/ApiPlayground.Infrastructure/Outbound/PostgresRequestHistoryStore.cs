@@ -1,14 +1,12 @@
-using System.Text.Json;
 using ApiPlayground.Api.Data;
 using ApiPlayground.Application.Outbound;
+using ApiPlayground.Domain.Requests;
 using Microsoft.EntityFrameworkCore;
 
 namespace ApiPlayground.Infrastructure.Outbound;
 
 public sealed class PostgresRequestHistoryStore(PlatformDbContext dbContext) : IRequestHistoryStore
 {
-    private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web);
-
     public async Task SaveAsync(RequestHistorySnapshot snapshot, CancellationToken cancellationToken = default)
     {
         dbContext.RequestHistory.Add(ToEntity(snapshot));
@@ -32,17 +30,15 @@ public sealed class PostgresRequestHistoryStore(PlatformDbContext dbContext) : I
     private static RequestHistoryEntity ToEntity(RequestHistorySnapshot snapshot) => new()
     {
         Id = snapshot.Id, CreatedAt = snapshot.CreatedAt, Method = snapshot.Method, Url = snapshot.Url,
-        HeadersJson = JsonSerializer.Serialize(snapshot.Headers, JsonOptions),
-        RedactedQueryParametersJson = JsonSerializer.Serialize(snapshot.RedactedQueryParameters, JsonOptions),
-        RedactedHeadersJson = JsonSerializer.Serialize(snapshot.RedactedHeaders, JsonOptions),
+        Headers = new Dictionary<string, string>(snapshot.Headers),
+        RedactedQueryParameters = new List<string>(snapshot.RedactedQueryParameters),
+        RedactedHeaders = new List<string>(snapshot.RedactedHeaders),
         Body = snapshot.Body, Failure = snapshot.Failure, StatusCode = snapshot.StatusCode,
         ElapsedMilliseconds = snapshot.ElapsedMilliseconds,
     };
 
     private static RequestHistorySnapshot ToSnapshot(RequestHistoryEntity entity) => new(
         entity.Id, entity.CreatedAt, entity.Method, entity.Url,
-        JsonSerializer.Deserialize<List<string>>(entity.RedactedQueryParametersJson, JsonOptions) ?? new(),
-        JsonSerializer.Deserialize<Dictionary<string, string>>(entity.HeadersJson, JsonOptions) ?? new(),
-        JsonSerializer.Deserialize<List<string>>(entity.RedactedHeadersJson, JsonOptions) ?? new(),
+        entity.RedactedQueryParameters, entity.Headers, entity.RedactedHeaders,
         entity.Body, entity.Failure, entity.StatusCode, entity.ElapsedMilliseconds);
 }

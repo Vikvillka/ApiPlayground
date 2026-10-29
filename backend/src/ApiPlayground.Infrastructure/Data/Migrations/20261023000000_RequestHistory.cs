@@ -35,22 +35,23 @@ public sealed class RequestHistory : Migration
     protected override void BuildTargetModel(ModelBuilder modelBuilder)
     {
         modelBuilder.HasAnnotation("ProductVersion", "10.0.0");
-        modelBuilder.Entity<RequestHistoryEntity>(entity =>
+        // String-based entity name keeps this historical model independent of the current CLR types.
+        modelBuilder.Entity("ApiPlayground.Api.Data.RequestHistoryEntity", entity =>
         {
             entity.ToTable("request_history");
-            entity.HasKey(item => item.Id);
-            entity.HasIndex(item => new { item.CreatedAt, item.Id });
-            entity.Property(item => item.Id).HasColumnName("id");
-            entity.Property(item => item.CreatedAt).HasColumnName("created_at").IsRequired();
-            entity.Property(item => item.Method).HasColumnName("method").HasMaxLength(8).IsRequired();
-            entity.Property(item => item.Url).HasColumnName("url").HasMaxLength(2048).IsRequired();
-            entity.Property(item => item.RedactedQueryParametersJson).HasColumnName("redacted_query_parameters_json").IsRequired();
-            entity.Property(item => item.HeadersJson).HasColumnName("headers_json").IsRequired();
-            entity.Property(item => item.RedactedHeadersJson).HasColumnName("redacted_headers_json").IsRequired();
-            entity.Property(item => item.Body).HasColumnName("body");
-            entity.Property(item => item.Failure).HasColumnName("failure").HasMaxLength(40).IsRequired();
-            entity.Property(item => item.StatusCode).HasColumnName("status_code");
-            entity.Property(item => item.ElapsedMilliseconds).HasColumnName("elapsed_ms").IsRequired();
+            entity.Property<Guid>("Id").HasColumnName("id");
+            entity.Property<DateTimeOffset>("CreatedAt").HasColumnName("created_at").IsRequired();
+            entity.Property<string>("Method").HasColumnName("method").HasMaxLength(8).IsRequired();
+            entity.Property<string>("Url").HasColumnName("url").HasMaxLength(2048).IsRequired();
+            entity.Property<string>("RedactedQueryParametersJson").HasColumnName("redacted_query_parameters_json").IsRequired();
+            entity.Property<string>("HeadersJson").HasColumnName("headers_json").IsRequired();
+            entity.Property<string>("RedactedHeadersJson").HasColumnName("redacted_headers_json").IsRequired();
+            entity.Property<string?>("Body").HasColumnName("body");
+            entity.Property<string>("Failure").HasColumnName("failure").HasMaxLength(40).IsRequired();
+            entity.Property<int?>("StatusCode").HasColumnName("status_code");
+            entity.Property<double>("ElapsedMilliseconds").HasColumnName("elapsed_ms").IsRequired();
+            entity.HasKey("Id");
+            entity.HasIndex("CreatedAt", "Id");
         });
     }
 }

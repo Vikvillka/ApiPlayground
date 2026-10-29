@@ -28,7 +28,7 @@ const Workspace = observer(function Workspace() {
       <Box sx={{
         display: "grid",
         gridTemplateColumns: { xs: "minmax(0, 1fr)", md: "repeat(2, minmax(0, 1fr))" },
-        gap: 2.5,
+        gap: 3,
         maxWidth: 1440,
         mx: "auto",
       }}>

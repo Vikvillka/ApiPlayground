@@ -2,12 +2,13 @@
 export const panelCardStyles = {
   display: "flex",
   flexDirection: "column",
-  gap: 2,
+  gap: 2.5,
   minWidth: 0,
-  minHeight: 440,
-  p: 2.5,
+  minHeight: 480,
+  p: 3,
   border: "1px solid",
-  borderColor: "#D9E0E6",
-  borderRadius: 1.5,
+  borderColor: "divider",
+  borderRadius: "12px",
   bgcolor: "background.paper",
+  boxShadow: "0 1px 2px rgba(15, 23, 42, 0.04)",
 } as const;

@@ -1,6 +1,7 @@
 import type { FormEvent, RefObject } from "react";
 import { observer } from "mobx-react-lite";
 import { Box, Button, Tab, Tabs, Typography } from "@mui/material";
+import BookmarkBorderIcon from "@mui/icons-material/BookmarkBorder";
 import { BodyEditor } from "../BodyEditor/BodyEditor";
 import { KeyValueEditor } from "../KeyValueEditor/KeyValueEditor";
 import { RequestLine } from "../RequestLine/RequestLine";
@@ -30,9 +31,21 @@ export const RequestEditor = observer(function RequestEditor({ saveButtonRef }: 
 
   return (
     <Box component="section" aria-labelledby="request-title" sx={requestEditorStyles.root}>
-      <Typography id="request-title" component="h2" variant="h6">
-        Request
-      </Typography>
+      <Box sx={requestEditorStyles.header}>
+        <Typography id="request-title" component="h2" variant="h6">
+          Request
+        </Typography>
+        <Button
+          ref={saveButtonRef}
+          variant="outlined"
+          size="small"
+          startIcon={<BookmarkBorderIcon />}
+          disabled={!editor.canSave || busy}
+          onClick={() => void saveRequest.openDialog()}
+        >
+          Save to collection
+        </Button>
+      </Box>
       <Box component="form" onSubmit={handleSubmit} sx={requestEditorStyles.form}>
         <RequestLine />
         {urlError && (
@@ -45,20 +58,12 @@ export const RequestEditor = observer(function RequestEditor({ saveButtonRef }: 
             {editor.hiddenValidationError}
           </Typography>
         )}
-        <Button
-          ref={saveButtonRef}
-          variant="outlined"
-          sx={requestEditorStyles.saveButton}
-          disabled={!editor.canSave || busy}
-          onClick={() => void saveRequest.openDialog()}
-        >
-          Save to collection
-        </Button>
         <Tabs
           value={editor.tab}
           onChange={(_, value: RequestTab) => editor.setTab(value)}
           aria-label="Request inputs"
           selectionFollowsFocus
+          sx={requestEditorStyles.tabs}
         >
           {requestTabs.map(value => (
             <Tab

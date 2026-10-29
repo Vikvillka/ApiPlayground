@@ -5,7 +5,7 @@ import { appTheme } from "../theme/appTheme";
 const globalStyles = {
   "button, input, select, textarea": { font: "inherit" },
   "button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-visible": {
-    outline: "3px solid #315F83",
+    outline: "2px solid #4f46e5",
     outlineOffset: 2,
   },
 };

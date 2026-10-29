@@ -14,6 +14,6 @@ export const appShellStyles = {
   main: {
     flex: 1,
     minWidth: 0,
-    p: 3,
+    p: { xs: 2, md: 3 },
   },
 } as const;

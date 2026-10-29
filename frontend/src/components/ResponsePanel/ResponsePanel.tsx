@@ -1,6 +1,6 @@
 import type { KeyboardEvent } from "react";
 import { observer } from "mobx-react-lite";
-import { Box, Tab, Tabs, Typography } from "@mui/material";
+import { Box, Chip, Tab, Tabs, Typography } from "@mui/material";
 import { formatResponseBody, type ResponseTab } from "../../request/requestHelpers";
 import { useRootStore } from "../../stores/StoreContext";
 import { ResponseHeaders } from "../ResponseHeaders/ResponseHeaders";
@@ -15,6 +15,8 @@ export const ResponsePanel = observer(function ResponsePanel() {
   const { tracer } = useRootStore();
   const result = tracer.result;
   const hasDetails = result !== null && result.requestSent && result.statusCode !== null;
+  const statusCode = result?.statusCode ?? null;
+  const isSuccess = statusCode !== null && statusCode >= 200 && statusCode < 300;
 
   function handleTabKeyDown(event: KeyboardEvent<HTMLDivElement>) {
     const currentIndex = responseTabs.findIndex(value => tabId(value) === (event.target as HTMLElement).id);
@@ -56,7 +58,12 @@ export const ResponsePanel = observer(function ResponsePanel() {
           )}
           {hasDetails && (
             <Box role="status" sx={responsePanelStyles.summary}>
-              <strong>HTTP {result.statusCode}</strong>
+              <Chip
+                size="small"
+                variant="outlined"
+                color={isSuccess ? "success" : "error"}
+                label={`HTTP ${result.statusCode}`}
+              />
               <span>{result.elapsedMilliseconds.toFixed(0)} ms</span>
             </Box>
           )}
@@ -73,6 +80,7 @@ export const ResponsePanel = observer(function ResponsePanel() {
                   onChange={(_, value: ResponseTab) => tracer.setResponseTab(value)}
                   aria-label="Response details"
                   selectionFollowsFocus
+                  sx={responsePanelStyles.tabs}
                 >
                   {responseTabs.map(value => (
                     <Tab

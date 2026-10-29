@@ -1,8 +1,9 @@
-import { Box, Button, NativeSelect, TextField } from "@mui/material";
+import { Box, Button, NativeSelect, OutlinedInput, TextField } from "@mui/material";
+import PlayArrowIcon from "@mui/icons-material/PlayArrow";
 import { observer } from "mobx-react-lite";
 import { requestMethods, type RequestMethod } from "../../request/requestHelpers";
 import { useRootStore } from "../../stores/StoreContext";
-import { requestLineStyles } from "./RequestLine.styles";
+import { methodSelectSx, requestLineStyles } from "./RequestLine.styles";
 
 export const RequestLine = observer(function RequestLine() {
   const { editor, tracer } = useRootStore();
@@ -15,8 +16,9 @@ export const RequestLine = observer(function RequestLine() {
         value={editor.method}
         disabled={busy}
         onChange={event => editor.setMethod(event.target.value as RequestMethod)}
+        input={<OutlinedInput />}
         inputProps={{ "aria-label": "Request method" }}
-        sx={requestLineStyles.method}
+        sx={methodSelectSx(editor.method)}
       >
         {requestMethods.map(method => (
           <option key={method} value={method}>
@@ -43,6 +45,7 @@ export const RequestLine = observer(function RequestLine() {
       <Button
         type="submit"
         variant="contained"
+        startIcon={<PlayArrowIcon />}
         disabled={!editor.canSend || busy}
         aria-describedby={editor.hiddenValidationError ? "send-validation-error" : undefined}
       >

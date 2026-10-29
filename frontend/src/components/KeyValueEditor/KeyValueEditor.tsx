@@ -1,4 +1,6 @@
-import { Box, Button, Checkbox, FormControlLabel, TextField, Typography } from "@mui/material";
+import { Box, Button, Checkbox, FormControlLabel, IconButton, TextField, Typography } from "@mui/material";
+import AddIcon from "@mui/icons-material/Add";
+import DeleteOutlineIcon from "@mui/icons-material/DeleteOutlined";
 import type { RequestRow } from "../../request/requestHelpers";
 import { keyValueEditorStyles } from "./KeyValueEditor.styles";
 
@@ -59,14 +61,16 @@ export function KeyValueEditor({ noun, rows, disabled, keyError, onChange, onAdd
                 />
               }
             />
-            <Button
+            <IconButton
               type="button"
               aria-label={`Remove ${singular}`}
               disabled={disabled}
               onClick={() => onRemove(row.id)}
+              size="small"
+              sx={keyValueEditorStyles.remove}
             >
-              Remove
-            </Button>
+              <DeleteOutlineIcon fontSize="small" />
+            </IconButton>
           </Box>
         );
       })}
@@ -75,7 +79,13 @@ export function KeyValueEditor({ noun, rows, disabled, keyError, onChange, onAdd
           {keyError}
         </Typography>
       )}
-      <Button type="button" onClick={onAdd} disabled={disabled} sx={{ alignSelf: "flex-start" }}>
+      <Button
+        type="button"
+        onClick={onAdd}
+        disabled={disabled}
+        startIcon={<AddIcon />}
+        sx={keyValueEditorStyles.add}
+      >
         Add {singular}
       </Button>
     </Box>

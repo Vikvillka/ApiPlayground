@@ -5,7 +5,7 @@ using Microsoft.EntityFrameworkCore;
 
 namespace ApiPlayground.Infrastructure.Outbound;
 
-public sealed class PostgresRequestHistoryStore(PlatformDbContext dbContext) : IRequestHistoryStore
+public sealed class PostgresRequestHistoryRepository(PlatformDbContext dbContext) : IRequestHistoryRepository
 {
     public async Task SaveAsync(RequestHistorySnapshot snapshot, CancellationToken cancellationToken = default)
     {

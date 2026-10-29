@@ -5,7 +5,7 @@ using Microsoft.EntityFrameworkCore;
 
 namespace ApiPlayground.Infrastructure.Outbound;
 
-public sealed class PostgresRequestCollectionStore(PlatformDbContext dbContext) : IRequestCollectionStore
+public sealed class PostgresRequestCollectionRepository(PlatformDbContext dbContext) : IRequestCollectionRepository
 {
     public async Task<IReadOnlyList<RequestCollectionSnapshot>> ListAsync(CancellationToken cancellationToken = default)
     {

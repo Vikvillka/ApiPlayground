@@ -88,7 +88,7 @@ public sealed class OutboundSafetyTests
     [InlineData("3fff::1", false)]
     [InlineData("2606:4700:4700::1111", true)]
     public void Address_classifier_handles_special_use_ranges(string address, bool expected) =>
-        Assert.Equal(expected, OutboundPolicy.IsPublicAddress(IPAddress.Parse(address)));
+        Assert.Equal(expected, NetworkAddressClassifier.IsPublic(IPAddress.Parse(address)));
 
     [Fact]
     public async Task Validated_ipv6_dns_answer_is_selected_for_dns_hostname()

@@ -81,7 +81,7 @@ public sealed class ArchitectureBoundaryTests
             .Where(path => !path.Contains(Path.DirectorySeparatorChar + "obj" + Path.DirectorySeparatorChar))
             .Where(path => !string.Equals(
                 Path.GetRelativePath(BackendRoot, path).Replace(Path.DirectorySeparatorChar, '/'),
-                "src/ApiPlayground.Infrastructure/Outbound/GuardedTargetHttpClient.cs",
+                "src/ApiPlayground.Infrastructure/Services/GuardedTargetHttpClient.cs",
                 StringComparison.Ordinal))
             .SelectMany(path => forbiddenPatterns
                 .Where(pattern => File.ReadAllText(path).Contains(pattern, StringComparison.Ordinal))

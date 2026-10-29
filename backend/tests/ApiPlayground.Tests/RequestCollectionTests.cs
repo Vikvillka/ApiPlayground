@@ -11,7 +11,7 @@ public sealed class RequestCollectionTests
     [Fact]
     public async Task Save_redacts_sensitive_headers_and_preserves_other_request_fields()
     {
-        var store = new InMemoryCollectionStore();
+        var store = new InMemoryCollectionRepository();
         var useCase = new SaveRequestUseCase(store);
         var saved = await useCase.SaveAsync(new SaveRequestCommand(null, "Reusable", "PATCH /resource", "PATCH",
             "https://example.test/resource?tag=one&access_token=private&mode=full", new Dictionary<string, string>
@@ -43,7 +43,7 @@ public sealed class RequestCollectionTests
             ["X-Access-TOKEN"] = "private",
             ["X-Ordinary"] = "visible",
         };
-        var useCase = new SaveRequestUseCase(new InMemoryCollectionStore());
+        var useCase = new SaveRequestUseCase(new InMemoryCollectionRepository());
         var command = new SaveRequestCommand(null, "Reusable", "GET /", "GET", "https://example.test/", headers, null);
 
         var saved = await useCase.SaveAsync(command);
@@ -62,7 +62,7 @@ public sealed class RequestCollectionTests
     [Fact]
     public async Task Save_use_case_rejects_ambiguous_or_invalid_requests_before_persistence()
     {
-        var store = new InMemoryCollectionStore();
+        var store = new InMemoryCollectionRepository();
         var useCase = new SaveRequestUseCase(store);
         var valid = new SaveRequestCommand(null, "Requests", "GET /", "GET", "https://example.test/",
             new Dictionary<string, string>(), null);
@@ -79,7 +79,7 @@ public sealed class RequestCollectionTests
     [InlineData("get")]
     public async Task Save_rejects_unsupported_or_nonuppercase_methods_with_the_existing_message(string method)
     {
-        var store = new InMemoryCollectionStore();
+        var store = new InMemoryCollectionRepository();
         var useCase = new SaveRequestUseCase(store);
         var command = new SaveRequestCommand(null, "Requests", "request", method, "https://example.test/",
             new Dictionary<string, string>(), null);
@@ -97,7 +97,7 @@ public sealed class RequestCollectionTests
     [InlineData("https://example.test/#fragment")]
     public async Task Save_rejects_urls_outside_common_http_uri_shape_with_existing_message(string url)
     {
-        var store = new InMemoryCollectionStore();
+        var store = new InMemoryCollectionRepository();
         var useCase = new SaveRequestUseCase(store);
         var command = new SaveRequestCommand(null, "Requests", "request", "GET", url,
             new Dictionary<string, string>(), null);
@@ -116,7 +116,7 @@ public sealed class RequestCollectionTests
     [InlineData("DELETE")]
     public async Task Save_accepts_each_exact_supported_method(string method)
     {
-        var store = new InMemoryCollectionStore();
+        var store = new InMemoryCollectionRepository();
         var useCase = new SaveRequestUseCase(store);
         var command = new SaveRequestCommand(null, "Requests", "request", method, "https://example.test/",
             new Dictionary<string, string>(), null);
@@ -130,7 +130,7 @@ public sealed class RequestCollectionTests
     [Fact]
     public async Task Save_preserves_whitespace_body_as_absent_and_rejects_blank_or_duplicate_headers_before_persistence()
     {
-        var store = new InMemoryCollectionStore();
+        var store = new InMemoryCollectionRepository();
         var useCase = new SaveRequestUseCase(store);
         var valid = new SaveRequestCommand(null, "Requests", "POST /", "POST", "https://example.test/",
             new Dictionary<string, string>(), "   ");
@@ -154,7 +154,7 @@ public sealed class RequestCollectionTests
     [Fact]
     public async Task Save_keeps_method_validation_ahead_of_url_validation()
     {
-        var store = new InMemoryCollectionStore();
+        var store = new InMemoryCollectionRepository();
         var useCase = new SaveRequestUseCase(store);
         var command = new SaveRequestCommand(null, "Requests", "GET /", "trace", "not-a-url",
             new Dictionary<string, string>(), null);
@@ -177,7 +177,7 @@ public sealed class RequestCollectionTests
             await using (var setup = new PlatformDbContext(options))
                 await setup.Database.MigrateAsync();
 
-            var useCase = new SaveRequestUseCase(new PostgresRequestCollectionStore(new PlatformDbContext(options)));
+            var useCase = new SaveRequestUseCase(new PostgresRequestCollectionRepository(new PlatformDbContext(options)));
             var saved = await useCase.SaveAsync(new SaveRequestCommand(null, "Persisted", "GET /items", "GET",
                 "https://example.test/items?mode=full&password=private", new Dictionary<string, string>
                 {
@@ -187,7 +187,7 @@ public sealed class RequestCollectionTests
 
             await using (var freshContext = new PlatformDbContext(options))
             {
-                var reloaded = Assert.Single(await new PostgresRequestCollectionStore(freshContext).ListAsync());
+                var reloaded = Assert.Single(await new PostgresRequestCollectionRepository(freshContext).ListAsync());
                 var request = Assert.Single(reloaded.Requests);
                 Assert.Equal("Persisted", reloaded.Name);
                 Assert.Equal(saved.Id, request.Id);
@@ -200,20 +200,20 @@ public sealed class RequestCollectionTests
 
             await using (var freshContext = new PlatformDbContext(options))
             {
-                var store = new PostgresRequestCollectionStore(freshContext);
+                var store = new PostgresRequestCollectionRepository(freshContext);
                 var invalidRow = new SavedRequestSnapshot(Guid.NewGuid(), DateTimeOffset.UtcNow, Guid.Empty, string.Empty,
                     new string('x', 121), "GET", "https://example.test/", new Dictionary<string, string>(), [], null);
                 await Assert.ThrowsAsync<DbUpdateException>(() => store.SaveAsync(invalidRow, null, "Must roll back"));
             }
 
             await using var verificationContext = new PlatformDbContext(options);
-            var collections = await new PostgresRequestCollectionStore(verificationContext).ListAsync();
+            var collections = await new PostgresRequestCollectionRepository(verificationContext).ListAsync();
             Assert.Single(collections);
             Assert.DoesNotContain(collections, item => item.Name == "Must roll back");
         });
     }
 
-    private sealed class InMemoryCollectionStore : IRequestCollectionStore
+    private sealed class InMemoryCollectionRepository : IRequestCollectionRepository
     {
         public List<RequestCollectionSnapshot> Collections { get; } = [];
 

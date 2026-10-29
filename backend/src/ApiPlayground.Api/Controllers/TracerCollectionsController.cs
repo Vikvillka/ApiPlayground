@@ -31,7 +31,7 @@ public sealed class TracerCollectionsController(
         return new JsonResult(collections.Select(collection => new TracerCollectionResponse(
             collection.Id,
             collection.Name,
-            collection.Requests.Select(ToResponse).ToArray())).ToArray());
+            collection.Requests.Select(request => request.ToResponse()).ToArray())).ToArray());
     }
 
     [HttpPost("requests")]
@@ -50,7 +50,9 @@ public sealed class TracerCollectionsController(
         }
 
         if (request is null)
+        {
             return BadRequest();
+        }
 
         try
         {
@@ -62,7 +64,7 @@ public sealed class TracerCollectionsController(
                 request.Url,
                 request.Headers ?? new Dictionary<string, string>(),
                 request.Body), cancellationToken);
-            return new JsonResult(ToResponse(saved)) { StatusCode = StatusCodes.Status201Created };
+            return new JsonResult(saved.ToResponse()) { StatusCode = StatusCodes.Status201Created };
         }
         catch (ArgumentException exception)
         {
@@ -74,19 +76,4 @@ public sealed class TracerCollectionsController(
             return ServiceUnavailableProblem("The request could not be saved. Your request is still available to retry.");
         }
     }
-
-    private static TracerSavedRequestResponse ToResponse(SavedRequestSnapshot item) => new(
-        item.Id,
-        item.CreatedAt,
-        item.CollectionId,
-        item.CollectionName,
-        item.Title,
-        item.Method,
-        item.Url,
-        item.Headers.Select(header => new TracerHeaderResponse(
-            header.Key,
-            item.RedactedHeaders.Contains(header.Key, StringComparer.OrdinalIgnoreCase) ? string.Empty : header.Value,
-            item.RedactedHeaders.Contains(header.Key, StringComparer.OrdinalIgnoreCase))).ToArray(),
-        item.RedactedHeaders,
-        item.Body);
 }

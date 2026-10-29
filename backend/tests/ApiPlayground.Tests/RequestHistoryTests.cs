@@ -58,10 +58,9 @@ public sealed class RequestHistoryTests
     [InlineData(OutboundFailure.PolicyRejected, false)]
     public async Task Use_case_records_only_dispatch_started_attempts(OutboundFailure failure, bool dispatchStarted)
     {
-        var store = new InMemoryHistoryStore();
+        var store = new InMemoryHistoryRepository();
         var useCase = new GetTracerUseCase(new FixedExecutor(new OutboundResult(failure, null, TimeSpan.FromMilliseconds(5),
-            new Dictionary<string, IReadOnlyList<string>>(), ReadOnlyMemory<byte>.Empty, "diagnostic", dispatchStarted)),
-            new SuccessfulSmokeCheck(), store);
+            new Dictionary<string, IReadOnlyList<string>>(), ReadOnlyMemory<byte>.Empty, "diagnostic", dispatchStarted)), store);
 
         var result = await useCase.ExecuteAsync(new OutboundRequest(new Uri("https://example.test/"), "GET"));
 
@@ -73,7 +72,7 @@ public sealed class RequestHistoryTests
     public async Task History_storage_failure_does_not_replace_dispatch_result()
     {
         var expected = SuccessResult();
-        var useCase = new GetTracerUseCase(new FixedExecutor(expected), new SuccessfulSmokeCheck(), new FailingHistoryStore());
+        var useCase = new GetTracerUseCase(new FixedExecutor(expected), new FailingHistoryRepository());
 
         var result = await useCase.ExecuteAsync(new OutboundRequest(new Uri("https://example.test/"), "GET"));
 
@@ -85,7 +84,7 @@ public sealed class RequestHistoryTests
     [Fact]
     public async Task Postgres_store_uses_stable_newest_first_order_and_does_not_archive_response_data()
     {
-        var store = new InMemoryHistoryStore();
+        var store = new InMemoryHistoryRepository();
         var older = RequestHistoryRedaction.Create(new OutboundRequest(new Uri("https://example.test/older"), "GET"), SuccessResult(), DateTimeOffset.UnixEpoch);
         var newerA = RequestHistoryRedaction.Create(new OutboundRequest(new Uri("https://example.test/newer-a"), "GET"), SuccessResult(), DateTimeOffset.UnixEpoch.AddSeconds(1));
         var newerB = newerA with { Id = Guid.Parse("ffffffff-ffff-ffff-ffff-ffffffffffff") };
@@ -102,7 +101,7 @@ public sealed class RequestHistoryTests
     [Fact]
     public async Task Application_history_use_case_loads_the_requested_snapshot()
     {
-        var store = new InMemoryHistoryStore();
+        var store = new InMemoryHistoryRepository();
         var snapshot = RequestHistoryRedaction.Create(new OutboundRequest(new Uri("https://example.test/load?token="), "GET"), SuccessResult());
         await store.SaveAsync(snapshot);
 
@@ -119,12 +118,7 @@ public sealed class RequestHistoryTests
         public Task<OutboundResult> ExecuteAsync(OutboundRequest request, CancellationToken cancellationToken = default) => Task.FromResult(result);
     }
 
-    private sealed class SuccessfulSmokeCheck : ITracerPersistenceSmokeCheck
-    {
-        public Task<bool> VerifyRoundTripAsync(CancellationToken cancellationToken = default) => Task.FromResult(true);
-    }
-
-    private sealed class InMemoryHistoryStore : IRequestHistoryStore
+    private sealed class InMemoryHistoryRepository : IRequestHistoryRepository
     {
         public List<RequestHistorySnapshot> Items { get; } = [];
         public Task SaveAsync(RequestHistorySnapshot snapshot, CancellationToken cancellationToken = default)
@@ -137,7 +131,7 @@ public sealed class RequestHistoryTests
         public Task<RequestHistorySnapshot?> FindAsync(Guid id, CancellationToken cancellationToken = default) => Task.FromResult(Items.SingleOrDefault(item => item.Id == id));
     }
 
-    private sealed class FailingHistoryStore : IRequestHistoryStore
+    private sealed class FailingHistoryRepository : IRequestHistoryRepository
     {
         public Task SaveAsync(RequestHistorySnapshot snapshot, CancellationToken cancellationToken = default) => throw new InvalidOperationException("storage unavailable");
         public Task<IReadOnlyList<RequestHistorySnapshot>> ListAsync(CancellationToken cancellationToken = default) => Task.FromResult<IReadOnlyList<RequestHistorySnapshot>>([]);

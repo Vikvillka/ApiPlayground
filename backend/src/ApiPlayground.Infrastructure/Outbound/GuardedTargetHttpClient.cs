@@ -3,6 +3,7 @@ using System.Diagnostics;
 using System.Net;
 using System.Net.Sockets;
 using ApiPlayground.Application.Outbound;
+using static ApiPlayground.Infrastructure.Outbound.OutboundResults;
 
 namespace ApiPlayground.Infrastructure.Outbound;
 
@@ -291,19 +292,5 @@ public sealed class GuardedTargetHttpClient : IOutboundRequestExecutor
             socket.Dispose();
             throw;
         }
-    }
-
-    private static OutboundResult Failed(
-        OutboundFailure failure,
-        Stopwatch stopwatch,
-        string diagnostic,
-        int? statusCode = null,
-        IReadOnlyDictionary<string, IReadOnlyList<string>>? headers = null,
-        bool dispatchStarted = false)
-    {
-        stopwatch.Stop();
-        return new OutboundResult(failure, statusCode, stopwatch.Elapsed,
-            headers ?? new ReadOnlyDictionary<string, IReadOnlyList<string>>(new Dictionary<string, IReadOnlyList<string>>()),
-            ReadOnlyMemory<byte>.Empty, diagnostic, dispatchStarted);
     }
 }

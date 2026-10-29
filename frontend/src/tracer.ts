@@ -4,7 +4,6 @@ export type TracerResponse = {
   elapsedMilliseconds: number;
   headers: Record<string, string[]>;
   body: string;
-  persistenceVerified: boolean;
   error: string | null;
   requestSent: boolean;
   historySaved?: boolean;

@@ -89,7 +89,6 @@ internal sealed class Story9BrowserApiHost(string appConnectionString, Uri targe
         builder.Configuration["ConnectionStrings:Postgres"] = appConnectionString;
         builder.Services.AddInfrastructure(builder.Configuration);
         builder.Services.AddGuardedOutbound(OutboundPolicy.ForTestOnlyLoopbackEndpoint(targetAddress));
-        builder.Services.AddScoped<ITracerPersistenceSmokeCheck, PostgresTracerPersistenceSmokeCheck>();
         builder.Services.AddControllers();
         builder.Services.AddScoped<GetTracerUseCase>();
         builder.Services.AddScoped<RequestHistoryUseCase>();

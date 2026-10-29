@@ -48,8 +48,8 @@ public sealed class StartupConfigurationTests
                 services.RemoveAll<IOutboundRequestExecutor>();
                 services.AddSingleton<IOutboundRequestExecutor>(new ThrowingExecutor(
                     new InvalidOperationException("upstream rejected " + querySecret)));
-                services.RemoveAll<IRequestHistoryStore>();
-                services.AddSingleton<IRequestHistoryStore>(new NullHistoryStore());
+                services.RemoveAll<IRequestHistoryRepository>();
+                services.AddSingleton<IRequestHistoryRepository>(new NullHistoryRepository());
             }));
         await using (factory)
         using (var request = new HttpRequestMessage(HttpMethod.Post, "/api/tracer/get")
@@ -108,7 +108,7 @@ public sealed class StartupConfigurationTests
             throw exception;
     }
 
-    private sealed class NullHistoryStore : IRequestHistoryStore
+    private sealed class NullHistoryRepository : IRequestHistoryRepository
     {
         public Task SaveAsync(RequestHistorySnapshot snapshot, CancellationToken cancellationToken = default) =>
             Task.CompletedTask;

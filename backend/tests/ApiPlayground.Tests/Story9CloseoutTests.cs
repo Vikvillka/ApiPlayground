@@ -27,7 +27,7 @@ public sealed class Story9CloseoutTests
             context.Response.Headers["X-Story9"] = "owned-loopback";
             await context.Response.WriteAsync("{\"ok\":true,\"marker\":\"story9\"}");
         });
-        var history = new RecordingHistoryStore();
+        var history = new RecordingHistoryRepository();
         await using var factory = CreateApiFactory(target.BaseAddress, history);
         using var request = CreateTracerRequest(target.BaseAddress.ToString());
         request.Content = JsonContent.Create(new { url = target.BaseAddress.ToString(), method = "GET" });
@@ -49,7 +49,7 @@ public sealed class Story9CloseoutTests
     public async Task Policy_rejection_does_not_connect_or_change_history()
     {
         await using var target = await Outbound.ControlledLoopbackServer.StartAsync();
-        var history = new RecordingHistoryStore();
+        var history = new RecordingHistoryRepository();
         await using var factory = CreateProductionApiFactory(history);
         using var request = CreateTracerRequest(target.BaseAddress.ToString());
         request.Content = JsonContent.Create(new { url = target.BaseAddress.ToString(), method = "GET" });
@@ -201,7 +201,7 @@ public sealed class Story9CloseoutTests
             await context.Database.MigrateAsync();
 
         await using var historyContext = new ApiPlayground.Api.Data.PlatformDbContext(options);
-        var historyStore = new ApiPlayground.Infrastructure.Outbound.PostgresRequestHistoryStore(historyContext);
+        var historyStore = new ApiPlayground.Infrastructure.Outbound.PostgresRequestHistoryRepository(historyContext);
         var saved = RequestHistoryRedaction.Create(
             new OutboundRequest(new Uri("http://127.0.0.1:49152/persisted"), "GET"),
             new OutboundResult(OutboundFailure.None, 200, TimeSpan.FromMilliseconds(1),
@@ -209,7 +209,7 @@ public sealed class Story9CloseoutTests
         await historyStore.SaveAsync(saved);
 
         await using var verificationContext = new ApiPlayground.Api.Data.PlatformDbContext(options);
-        var listed = await new ApiPlayground.Infrastructure.Outbound.PostgresRequestHistoryStore(verificationContext).ListAsync();
+        var listed = await new ApiPlayground.Infrastructure.Outbound.PostgresRequestHistoryRepository(verificationContext).ListAsync();
         Assert.Equal(saved.Id, Assert.Single(listed).Id);
         var appConnection = new NpgsqlConnectionStringBuilder(database.AppConnectionString);
         Assert.Equal(database.DatabaseName, appConnection.Database);
@@ -239,26 +239,22 @@ public sealed class Story9CloseoutTests
         Assert.DoesNotContain("OutboundPolicy__", program, StringComparison.Ordinal);
     }
 
-    private static WebApplicationFactory<Program> CreateApiFactory(Uri target, RecordingHistoryStore history) =>
+    private static WebApplicationFactory<Program> CreateApiFactory(Uri target, RecordingHistoryRepository history) =>
         new WebApplicationFactory<Program>().WithWebHostBuilder(builder => builder.ConfigureTestServices(services =>
         {
             services.RemoveAll<IOutboundRequestExecutor>();
             services.AddSingleton<IOutboundRequestExecutor>(new GuardedTargetHttpClient(
                 OutboundPolicy.ForTestOnlyLoopbackEndpoint(target),
                 (_, _) => Task.FromResult(new[] { IPAddress.Loopback })));
-            services.RemoveAll<ITracerPersistenceSmokeCheck>();
-            services.AddSingleton<ITracerPersistenceSmokeCheck>(new SuccessfulPersistenceCheck());
-            services.RemoveAll<IRequestHistoryStore>();
-            services.AddSingleton<IRequestHistoryStore>(history);
+            services.RemoveAll<IRequestHistoryRepository>();
+            services.AddSingleton<IRequestHistoryRepository>(history);
         }));
 
-    private static WebApplicationFactory<Program> CreateProductionApiFactory(RecordingHistoryStore history) =>
+    private static WebApplicationFactory<Program> CreateProductionApiFactory(RecordingHistoryRepository history) =>
         new WebApplicationFactory<Program>().WithWebHostBuilder(builder => builder.ConfigureTestServices(services =>
         {
-            services.RemoveAll<ITracerPersistenceSmokeCheck>();
-            services.AddSingleton<ITracerPersistenceSmokeCheck>(new SuccessfulPersistenceCheck());
-            services.RemoveAll<IRequestHistoryStore>();
-            services.AddSingleton<IRequestHistoryStore>(history);
+            services.RemoveAll<IRequestHistoryRepository>();
+            services.AddSingleton<IRequestHistoryRepository>(history);
         }));
 
     private static HttpRequestMessage CreateTracerRequest(string url)
@@ -281,7 +277,7 @@ public sealed class Story9CloseoutTests
         return directory?.FullName ?? throw new DirectoryNotFoundException("Could not locate the repository root.");
     }
 
-    private sealed class RecordingHistoryStore : IRequestHistoryStore
+    private sealed class RecordingHistoryRepository : IRequestHistoryRepository
     {
         public List<RequestHistorySnapshot> Items { get; } = [];
         public Task SaveAsync(RequestHistorySnapshot snapshot, CancellationToken cancellationToken = default)
@@ -293,11 +289,6 @@ public sealed class Story9CloseoutTests
             Task.FromResult<IReadOnlyList<RequestHistorySnapshot>>(Items.ToArray());
         public Task<RequestHistorySnapshot?> FindAsync(Guid id, CancellationToken cancellationToken = default) =>
             Task.FromResult(Items.SingleOrDefault(item => item.Id == id));
-    }
-
-    private sealed class SuccessfulPersistenceCheck : ITracerPersistenceSmokeCheck
-    {
-        public Task<bool> VerifyRoundTripAsync(CancellationToken cancellationToken = default) => Task.FromResult(true);
     }
 
     private sealed record TracerPayload(string Failure, int? StatusCode, string Body,

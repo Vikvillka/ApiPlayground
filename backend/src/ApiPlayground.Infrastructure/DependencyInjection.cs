@@ -28,8 +28,8 @@ public static class DependencyInjection
             options.UseNpgsql(postgres.ConnectionString, npgsql =>
                 npgsql.MigrationsAssembly(typeof(DependencyInjection).Assembly.FullName));
         });
-        services.AddScoped<IRequestHistoryStore, PostgresRequestHistoryStore>();
-        services.AddScoped<IRequestCollectionStore, PostgresRequestCollectionStore>();
+        services.AddScoped<IRequestHistoryRepository, PostgresRequestHistoryRepository>();
+        services.AddScoped<IRequestCollectionRepository, PostgresRequestCollectionRepository>();
 
         return services;
     }
@@ -51,13 +51,6 @@ public static class DependencyInjection
                 throw new InvalidOperationException("The outbound policy is invalid.");
             return new GuardedTargetHttpClient(configuredPolicy);
         });
-        return services;
-    }
-
-    public static IServiceCollection AddTracerPersistenceSmokeCheck(this IServiceCollection services)
-    {
-        ArgumentNullException.ThrowIfNull(services);
-        services.AddScoped<ITracerPersistenceSmokeCheck, PostgresTracerPersistenceSmokeCheck>();
         return services;
     }
 }

@@ -65,41 +65,72 @@ const localApiHeaders = {
   "X-ApiPlayground-Request": "1",
 };
 
+// Reads the body as text first so empty bodies (bodyless 400/404/413) and non-JSON bodies do not throw.
+async function readBody(response: Response): Promise<unknown> {
+  const text = await response.text();
+  if (text.length === 0) return null;
+  try {
+    return JSON.parse(text) as unknown;
+  } catch {
+    return null;
+  }
+}
+
+// Prefers Problem Details `detail`, then the legacy `error` envelope, then the caller's fallback.
+function messageFrom(body: unknown, fallback: string): string {
+  if (typeof body === "object" && body !== null) {
+    const { detail, error } = body as { detail?: unknown; error?: unknown };
+    if (typeof detail === "string" && detail.length > 0) return detail;
+    if (typeof error === "string" && error.length > 0) return error;
+  }
+  return fallback;
+}
+
+function isTracerResponse(body: unknown): body is TracerResponse {
+  return typeof body === "object" && body !== null && "failure" in body;
+}
+
 export async function sendTracerRequest(request: TracerRequest): Promise<TracerResponse> {
   const response = await fetch("/api/tracer/get", {
     method: "POST",
     headers: localApiHeaders,
     body: JSON.stringify(request),
   });
-  const result = (await response.json()) as TracerResponse | { error?: string };
-  if (!response.ok && "failure" in result) return result as TracerResponse;
-  if (!response.ok && !("failure" in result)) {
-    throw new Error(result.error ?? `Tracer request failed with HTTP ${response.status}.`);
-  }
-  return result as TracerResponse;
+  const body = await readBody(response);
+  // Rich outcomes (including non-2xx HTTP results and policy rejections) are returned as observed results.
+  if (isTracerResponse(body)) return body;
+  if (response.ok) throw new Error("The tracer response could not be read.");
+  throw new Error(messageFrom(body, `Tracer request failed with HTTP ${response.status}.`));
 }
 
 export async function getTracerHistory(): Promise<HistoryItem[]> {
   const response = await fetch("/api/tracer/history", { method: "GET", headers: localApiHeaders });
-  if (!response.ok) throw new Error(`History could not be loaded (HTTP ${response.status}).`);
-  return await response.json() as HistoryItem[];
+  const body = await readBody(response);
+  const fallback = `History could not be loaded (HTTP ${response.status}).`;
+  if (!response.ok) throw new Error(messageFrom(body, fallback));
+  if (!Array.isArray(body)) throw new Error(fallback);
+  return body as HistoryItem[];
 }
 
 export async function getTracerCollections(): Promise<RequestCollection[]> {
   const response = await fetch("/api/tracer/collections", { method: "GET", headers: localApiHeaders });
-  if (!response.ok) throw new Error(`Collections could not be loaded (HTTP ${response.status}).`);
-  return await response.json() as RequestCollection[];
+  const body = await readBody(response);
+  const fallback = `Collections could not be loaded (HTTP ${response.status}).`;
+  if (!response.ok) throw new Error(messageFrom(body, fallback));
+  if (!Array.isArray(body)) throw new Error(fallback);
+  return body as RequestCollection[];
 }
 
 export async function saveTracerRequest(request: SaveRequestInput): Promise<SavedRequest> {
   const response = await fetch("/api/tracer/collections/requests", {
     method: "POST", headers: localApiHeaders, body: JSON.stringify(request),
   });
-  const result = await response.json() as SavedRequest | { error?: string; detail?: string };
+  const body = await readBody(response);
   if (!response.ok) {
-    const message = "error" in result ? result.error : undefined;
-    const detail = "detail" in result ? result.detail : undefined;
-    throw new Error(message ?? detail ?? `Request could not be saved (HTTP ${response.status}).`);
+    throw new Error(messageFrom(body, `Request could not be saved (HTTP ${response.status}).`));
   }
-  return result as SavedRequest;
+  if (typeof body !== "object" || body === null) {
+    throw new Error("The saved request response could not be read.");
+  }
+  return body as SavedRequest;
 }

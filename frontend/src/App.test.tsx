@@ -111,6 +111,46 @@ describe("request workspace", () => {
     expect(screen.getByText("ok")).toBeInTheDocument();
   });
 
+  it("shows Problem Details validation detail from the tracer API without a response panel", async () => {
+    const fetchMock = vi.fn().mockResolvedValue(new Response(JSON.stringify({
+      type: "about:blank", title: "Bad Request", status: 400, detail: "Enter a valid JSON body.",
+    }), { status: 400, headers: { "Content-Type": "application/problem+json" } }));
+    vi.stubGlobal("fetch", fetchMock);
+    render(<App />);
+    fireEvent.change(screen.getByLabelText("Request URL"), { target: { value: "https://example.test" } });
+    fireEvent.click(screen.getByRole("button", { name: "Send" }));
+
+    expect(await screen.findByRole("alert")).toHaveTextContent("Enter a valid JSON body.");
+    expect(screen.queryByRole("tablist", { name: "Response details" })).not.toBeInTheDocument();
+  });
+
+  it("still shows legacy error envelopes from the tracer API", async () => {
+    const fetchMock = vi.fn().mockResolvedValue(new Response(JSON.stringify({ error: "Choose a supported HTTP method." }), {
+      status: 400, headers: { "Content-Type": "application/json" },
+    }));
+    vi.stubGlobal("fetch", fetchMock);
+    render(<App />);
+    fireEvent.change(screen.getByLabelText("Request URL"), { target: { value: "https://example.test" } });
+    fireEvent.click(screen.getByRole("button", { name: "Send" }));
+
+    expect(await screen.findByRole("alert")).toHaveTextContent("Choose a supported HTTP method.");
+  });
+
+  it("shows sanitized History failure detail from Problem Details", async () => {
+    const fetchMock = vi.fn(async (input: string) => input === "/api/tracer/history"
+      ? new Response(JSON.stringify({
+        type: "about:blank", title: "An unexpected error occurred.", status: 500,
+        detail: "The request could not be completed. Try again later.",
+      }), { status: 500, headers: { "Content-Type": "application/problem+json" } })
+      : new Response("[]", { status: 200, headers: { "Content-Type": "application/json" } }));
+    vi.stubGlobal("fetch", fetchMock);
+    render(<App />);
+    fireEvent.click(screen.getByRole("button", { name: "Show History & Collections" }));
+
+    expect(await screen.findByRole("alert")).toHaveTextContent("The request could not be completed. Try again later.");
+    expect(screen.queryByText(/storage/i)).not.toBeInTheDocument();
+  });
+
   it("saves explicitly to a new collection and preserves the editor without sending", async () => {
     const fetchMock = vi.fn()
       .mockResolvedValueOnce(new Response("[]", { status: 200, headers: { "Content-Type": "application/json" } }))
@@ -195,7 +235,7 @@ describe("request workspace", () => {
   it("keeps save dialog values and request editor intact after failure for retry", async () => {
     const fetchMock = vi.fn()
       .mockResolvedValueOnce(new Response("[]", { status: 200, headers: { "Content-Type": "application/json" } }))
-      .mockResolvedValueOnce(new Response(JSON.stringify({ error: "The request could not be saved. Your request is still available to retry." }), { status: 503, headers: { "Content-Type": "application/problem+json" } }))
+      .mockResolvedValueOnce(new Response(JSON.stringify({ type: "about:blank", title: "Service Unavailable", status: 503, detail: "The request could not be saved. Your request is still available to retry." }), { status: 503, headers: { "Content-Type": "application/problem+json" } }))
       .mockResolvedValueOnce(new Response(JSON.stringify({
         id: "saved-2", createdAt: "2026-10-25T12:00:00Z", collectionId: "collection-2", collectionName: "Retry",
         title: "GET /retry", method: "GET", url: "https://example.test/retry", headers: [], redactedHeaders: [], body: null,

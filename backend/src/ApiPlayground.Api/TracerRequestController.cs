@@ -10,7 +10,7 @@ namespace ApiPlayground.Api;
 
 [Route("api/tracer")]
 [TracerRequestGuardMetadata]
-public sealed class TracerRequestController(GetTracerUseCase useCase, IOptions<HttpJsonOptions> jsonOptions) : ControllerBase
+public sealed class TracerRequestController(GetTracerUseCase useCase, IOptions<HttpJsonOptions> jsonOptions) : ApiControllerBase
 {
     [HttpPost("get")]
     public async Task<IActionResult> Get(CancellationToken cancellationToken)
@@ -29,22 +29,22 @@ public sealed class TracerRequestController(GetTracerUseCase useCase, IOptions<H
         if (request is null)
             return BadRequest();
         if (string.IsNullOrWhiteSpace(request.Url) || request.Url.Length > 2048)
-            return BadRequest(new { error = "Enter a URL to send a request." });
+            return BadRequestProblem("Enter a URL to send a request.");
         if (!RequestValidation.IsSupportedMethod(request.Method))
-            return BadRequest(new { error = "Choose a supported HTTP method." });
+            return BadRequestProblem("Choose a supported HTTP method.");
         if (!RequestValidation.TryCreateHttpUri(request.Url, out var uri))
-            return BadRequest(new { error = "Enter a valid absolute HTTP or HTTPS URL without credentials or fragments." });
+            return BadRequestProblem("Enter a valid absolute HTTP or HTTPS URL without credentials or fragments.");
         if (request.Method is "GET" or "DELETE" && !string.IsNullOrWhiteSpace(request.Body))
-            return BadRequest(new { error = "JSON bodies are only supported for POST, PUT, and PATCH." });
+            return BadRequestProblem("JSON bodies are only supported for POST, PUT, and PATCH.");
         if (request.Body is { Length: > 0 } && !IsValidJson(request.Body))
-            return BadRequest(new { error = "Enter a valid JSON body." });
+            return BadRequestProblem("Enter a valid JSON body.");
         if (request.Headers is not null && RequestValidation.HasDuplicateHeaderNames(request.Headers.Keys))
-            return BadRequest(new { error = "Enabled request header names must be unique." });
+            return BadRequestProblem("Enabled request header names must be unique.");
         if (request.Headers is not null && request.Headers.Any(header => string.IsNullOrWhiteSpace(header.Key) ||
             header.Key.Equals("Host", StringComparison.OrdinalIgnoreCase) ||
             header.Key.Equals("Content-Length", StringComparison.OrdinalIgnoreCase) ||
             header.Key.Equals("Content-Type", StringComparison.OrdinalIgnoreCase)))
-            return BadRequest(new { error = "Host, Content-Length, and Content-Type headers are managed by the request sender." });
+            return BadRequestProblem("Host, Content-Length, and Content-Type headers are managed by the request sender.");
 
         var headers = request.Headers ?? new Dictionary<string, string>();
         var contentType = string.IsNullOrWhiteSpace(request.Body) ? null : "application/json";
@@ -52,7 +52,7 @@ public sealed class TracerRequestController(GetTracerUseCase useCase, IOptions<H
             string.IsNullOrWhiteSpace(request.Body) ? ReadOnlyMemory<byte>.Empty : Encoding.UTF8.GetBytes(request.Body), contentType);
         var result = await useCase.ExecuteAsync(outboundRequest, cancellationToken);
         if (result.Outbound is null)
-            return BadRequest(new { error = result.Error });
+            return BadRequestProblem(result.Error ?? "The request could not be completed.");
         if (!result.Outbound.Succeeded && result.Outbound.Failure != OutboundFailure.PolicyRejected)
             return new JsonResult(new
             {

@@ -1,6 +1,7 @@
 using System.Text.Json;
 using ApiPlayground.Application.Outbound;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using HttpJsonOptions = Microsoft.AspNetCore.Http.Json.JsonOptions;
 
@@ -10,7 +11,8 @@ namespace ApiPlayground.Api;
 [TracerRequestGuardMetadata]
 public sealed class TracerCollectionsController(
     SaveRequestUseCase useCase,
-    IOptions<HttpJsonOptions> jsonOptions) : ControllerBase
+    IOptions<HttpJsonOptions> jsonOptions,
+    ILogger<TracerCollectionsController> logger) : ApiControllerBase
 {
     [HttpGet]
     public async Task<IActionResult> List(CancellationToken cancellationToken)
@@ -20,9 +22,10 @@ public sealed class TracerCollectionsController(
         {
             collections = await useCase.ListAsync(cancellationToken);
         }
-        catch (Exception)
+        catch (Exception exception)
         {
-            return Problem("Collections could not be loaded. Try again.", statusCode: StatusCodes.Status503ServiceUnavailable);
+            ApiLog.CollectionOperationFailed(logger, "Collection list", exception.GetType().Name, HttpContext.TraceIdentifier);
+            return ServiceUnavailableProblem("Collections could not be loaded. Try again.");
         }
 
         return new JsonResult(collections.Select(collection => new TracerCollectionResponse(
@@ -63,12 +66,12 @@ public sealed class TracerCollectionsController(
         }
         catch (ArgumentException exception)
         {
-            return BadRequest(new { error = exception.Message });
+            return BadRequestProblem(exception.Message);
         }
-        catch (Exception)
+        catch (Exception exception)
         {
-            return Problem("The request could not be saved. Your request is still available to retry.",
-                statusCode: StatusCodes.Status503ServiceUnavailable);
+            ApiLog.CollectionOperationFailed(logger, "Collection save", exception.GetType().Name, HttpContext.TraceIdentifier);
+            return ServiceUnavailableProblem("The request could not be saved. Your request is still available to retry.");
         }
     }
 

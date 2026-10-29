@@ -109,10 +109,12 @@ public sealed class TracerEndpointTests
         request.Content = JsonContent.Create(new { url, method, body = "{invalid" });
 
         using var response = await factory.CreateClient().SendAsync(request);
-        var payload = await response.Content.ReadFromJsonAsync<ErrorResponse>();
+        var payload = await response.Content.ReadFromJsonAsync<ProblemResponse>();
 
         Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
-        Assert.Equal(error, payload?.Error);
+        Assert.Equal("application/problem+json", response.Content.Headers.ContentType?.MediaType);
+        Assert.Equal(400, payload?.Status);
+        Assert.Equal(error, payload?.Detail);
         Assert.Equal(0, executor.Calls);
     }
 
@@ -145,15 +147,15 @@ public sealed class TracerEndpointTests
         using var blankUrlRequest = CreateAllowedRequest(string.Empty);
         blankUrlRequest.Content = JsonContent.Create(new { url = string.Empty, method = "TRACE", body = "{" });
         using var blankUrlResponse = await client.SendAsync(blankUrlRequest);
-        var blankUrlPayload = await blankUrlResponse.Content.ReadFromJsonAsync<ErrorResponse>();
+        var blankUrlPayload = await blankUrlResponse.Content.ReadFromJsonAsync<ProblemResponse>();
 
         using var invalidMethodRequest = CreateAllowedRequest("not-a-url");
         invalidMethodRequest.Content = JsonContent.Create(new { url = "not-a-url", method = "TRACE", body = "{" });
         using var invalidMethodResponse = await client.SendAsync(invalidMethodRequest);
-        var invalidMethodPayload = await invalidMethodResponse.Content.ReadFromJsonAsync<ErrorResponse>();
+        var invalidMethodPayload = await invalidMethodResponse.Content.ReadFromJsonAsync<ProblemResponse>();
 
-        Assert.Equal("Enter a URL to send a request.", blankUrlPayload?.Error);
-        Assert.Equal("Choose a supported HTTP method.", invalidMethodPayload?.Error);
+        Assert.Equal("Enter a URL to send a request.", blankUrlPayload?.Detail);
+        Assert.Equal("Choose a supported HTTP method.", invalidMethodPayload?.Detail);
         Assert.Equal(0, executor.Calls);
     }
 
@@ -166,7 +168,7 @@ public sealed class TracerEndpointTests
         whitespaceBodyRequest.Content = JsonContent.Create(new { url = "https://example.test/", method = "POST", body = "   " });
 
         using var whitespaceBodyResponse = await factory.CreateClient().SendAsync(whitespaceBodyRequest);
-        var bodyError = await whitespaceBodyResponse.Content.ReadFromJsonAsync<ErrorResponse>();
+        var bodyError = await whitespaceBodyResponse.Content.ReadFromJsonAsync<ProblemResponse>();
 
         using var blankHeaderRequest = CreateAllowedRequest("https://example.test/");
         blankHeaderRequest.Content = JsonContent.Create(new
@@ -175,10 +177,10 @@ public sealed class TracerEndpointTests
             headers = new Dictionary<string, string> { [" "] = "value" },
         });
         using var blankHeaderResponse = await factory.CreateClient().SendAsync(blankHeaderRequest);
-        var headerError = await blankHeaderResponse.Content.ReadFromJsonAsync<ErrorResponse>();
+        var headerError = await blankHeaderResponse.Content.ReadFromJsonAsync<ProblemResponse>();
 
-        Assert.Equal("Enter a valid JSON body.", bodyError?.Error);
-        Assert.Equal("Host, Content-Length, and Content-Type headers are managed by the request sender.", headerError?.Error);
+        Assert.Equal("Enter a valid JSON body.", bodyError?.Detail);
+        Assert.Equal("Host, Content-Length, and Content-Type headers are managed by the request sender.", headerError?.Detail);
         Assert.Equal(0, executor.Calls);
     }
 
@@ -562,7 +564,7 @@ public sealed class TracerEndpointTests
     }
 
     [Fact]
-    public async Task History_store_exceptions_are_not_converted_to_collection_service_errors()
+    public async Task History_store_exceptions_return_sanitized_problem_details()
     {
         await using var factory = new WebApplicationFactory<Program>().WithWebHostBuilder(builder => builder.ConfigureTestServices(services =>
         {
@@ -573,9 +575,24 @@ public sealed class TracerEndpointTests
 
         using var response = await factory.CreateClient().SendAsync(request);
         Assert.Equal(HttpStatusCode.InternalServerError, response.StatusCode);
+        Assert.Equal("application/problem+json", response.Content.Headers.ContentType?.MediaType);
         var body = await response.Content.ReadAsStringAsync();
+        Assert.DoesNotContain("storage unavailable", body, StringComparison.Ordinal);
         Assert.DoesNotContain("Collections could not be loaded", body, StringComparison.Ordinal);
-        Assert.Contains("storage unavailable", body, StringComparison.Ordinal);
+        var problem = JsonSerializer.Deserialize<ProblemResponse>(body, JsonSerializerOptions.Web);
+        Assert.Equal(500, problem?.Status);
+        Assert.Equal("The request could not be completed. Try again later.", problem?.Detail);
+    }
+
+    [Fact]
+    public async Task Unknown_non_tracer_routes_remain_bodyless_not_found()
+    {
+        await using var factory = new WebApplicationFactory<Program>();
+        using var request = CreateAllowedRequest(string.Empty, HttpMethod.Get, "/api/unknown-route");
+
+        using var response = await factory.CreateClient().SendAsync(request);
+        Assert.Equal(HttpStatusCode.NotFound, response.StatusCode);
+        Assert.Empty(await response.Content.ReadAsByteArrayAsync());
     }
 
     [Fact]
@@ -653,13 +670,14 @@ public sealed class TracerEndpointTests
         var body = await response.Content.ReadAsStringAsync();
 
         Assert.Equal(HttpStatusCode.ServiceUnavailable, response.StatusCode);
-        Assert.Contains("Collections could not be loaded", body);
+        Assert.Equal("application/problem+json", response.Content.Headers.ContentType?.MediaType);
+        Assert.Equal("Collections could not be loaded. Try again.", JsonSerializer.Deserialize<ProblemResponse>(body, JsonSerializerOptions.Web)?.Detail);
         Assert.DoesNotContain("database password", body, StringComparison.OrdinalIgnoreCase);
         Assert.DoesNotContain("Npgsql", body, StringComparison.OrdinalIgnoreCase);
     }
 
     [Fact]
-    public async Task Collection_save_validation_failure_keeps_error_envelope_and_does_not_leak_storage_errors()
+    public async Task Collection_save_validation_failure_returns_problem_details_without_storage_errors()
     {
         await using var factory = new WebApplicationFactory<Program>();
         using var request = CreateAllowedRequest(string.Empty, path: "/api/tracer/collections/requests");
@@ -673,9 +691,10 @@ public sealed class TracerEndpointTests
         });
 
         using var response = await factory.CreateClient().SendAsync(request);
-        var payload = await response.Content.ReadFromJsonAsync<ErrorResponse>();
+        var payload = await response.Content.ReadFromJsonAsync<ProblemResponse>();
         Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
-        Assert.Equal("Enter a request title of 1 to 120 characters.", payload?.Error);
+        Assert.Equal("application/problem+json", response.Content.Headers.ContentType?.MediaType);
+        Assert.Equal("Enter a request title of 1 to 120 characters.", payload?.Detail);
     }
 
     [Fact]
@@ -699,7 +718,8 @@ public sealed class TracerEndpointTests
         using var response = await factory.CreateClient().SendAsync(request);
         var body = await response.Content.ReadAsStringAsync();
         Assert.Equal(HttpStatusCode.ServiceUnavailable, response.StatusCode);
-        Assert.Contains("The request could not be saved. Your request is still available to retry.", body);
+        Assert.Equal("application/problem+json", response.Content.Headers.ContentType?.MediaType);
+        Assert.Equal("The request could not be saved. Your request is still available to retry.", JsonSerializer.Deserialize<ProblemResponse>(body, JsonSerializerOptions.Web)?.Detail);
         Assert.DoesNotContain("database password", body, StringComparison.OrdinalIgnoreCase);
         Assert.DoesNotContain("Npgsql", body, StringComparison.OrdinalIgnoreCase);
     }
@@ -806,10 +826,11 @@ public sealed class TracerEndpointTests
 
         using var response = await factory.CreateClient().SendAsync(request);
 
-        var payload = await response.Content.ReadFromJsonAsync<ErrorResponse>();
+        var payload = await response.Content.ReadFromJsonAsync<ProblemResponse>();
 
         Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
-        Assert.Equal("Enabled request header names must be unique.", payload?.Error);
+        Assert.Equal("application/problem+json", response.Content.Headers.ContentType?.MediaType);
+        Assert.Equal("Enabled request header names must be unique.", payload?.Detail);
         Assert.Equal(0, executor.Calls);
     }
 
@@ -836,10 +857,11 @@ public sealed class TracerEndpointTests
         request.Content = JsonContent.Create(new { url = "https://example.test/", method = "get" });
 
         using var response = await factory.CreateClient().SendAsync(request);
-        var payload = await response.Content.ReadFromJsonAsync<ErrorResponse>();
+        var payload = await response.Content.ReadFromJsonAsync<ProblemResponse>();
 
         Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
-        Assert.Equal("Choose a supported HTTP method.", payload?.Error);
+        Assert.Equal("application/problem+json", response.Content.Headers.ContentType?.MediaType);
+        Assert.Equal("Choose a supported HTTP method.", payload?.Detail);
         Assert.Equal(0, executor.Calls);
     }
 
@@ -1019,7 +1041,7 @@ public sealed class TracerEndpointTests
         Dictionary<string, string[]> Headers, string Body, bool PersistenceVerified, string? Error, bool RequestSent,
         bool HistorySaved);
 
-    private sealed record ErrorResponse(string Error);
+    private sealed record ProblemResponse(string? Type, string? Title, int? Status, string? Detail);
 
     private sealed record HistoryDto(Guid Id, string Url, string[] RedactedQueryParameters);
     private sealed record SavedRequestDto(Guid Id, DateTimeOffset CreatedAt, Guid CollectionId, string CollectionName,

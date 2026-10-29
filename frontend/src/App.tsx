@@ -2,8 +2,8 @@ import { useLayoutEffect, useRef, type FormEvent, type KeyboardEvent } from "rea
 import { observer } from "mobx-react-lite";
 import { AppShell } from "./components/AppShell/AppShell";
 import { RequestEditor } from "./components/RequestEditor/RequestEditor";
+import { ResponsePanel } from "./components/ResponsePanel/ResponsePanel";
 import { TopBar } from "./components/TopBar/TopBar";
-import { formatResponseBody, type ResponseTab } from "./request/requestHelpers";
 import { RootStoreProvider, useRootStore } from "./stores/StoreContext";
 import type { HistoryItem, SavedRequest } from "./tracer";
 import "./App.css";
@@ -19,7 +19,6 @@ export function App() {
 const Workspace = observer(function Workspace() {
   const root = useRootStore();
   const { history, tracer, saveRequest } = root;
-  const result = tracer.result;
   const saveTitleRef = useRef<HTMLInputElement>(null);
   const saveTriggerRef = useRef<HTMLButtonElement>(null);
 
@@ -79,24 +78,6 @@ const Workspace = observer(function Workspace() {
     }
   }
 
-  function handleResponseTabKeyDown(event: KeyboardEvent<HTMLButtonElement>) {
-    const tabs: ResponseTab[] = ["Body", "Headers"];
-    const currentIndex = tabs.indexOf(tracer.responseTab);
-    const nextIndex = event.key === "ArrowRight"
-      ? (currentIndex + 1) % tabs.length
-      : event.key === "ArrowLeft"
-        ? (currentIndex - 1 + tabs.length) % tabs.length
-        : event.key === "Home"
-          ? 0
-          : event.key === "End"
-            ? tabs.length - 1
-            : -1;
-    if (nextIndex < 0) return;
-    event.preventDefault();
-    tracer.setResponseTab(tabs[nextIndex]);
-    document.getElementById(`response-tab-${tabs[nextIndex].toLowerCase()}`)?.focus();
-  }
-
   const historyDrawer = (
     <section id="request-history" aria-label="Request History">
       <h2>History</h2>
@@ -128,34 +109,7 @@ const Workspace = observer(function Workspace() {
       <TopBar historyOpen={history.open} onToggleHistory={() => void history.toggle()} />
       <div className="panes">
         <RequestEditor saveButtonRef={saveTriggerRef} />
-        <section aria-labelledby="response-title">
-          <h2 id="response-title">Response</h2>
-          {tracer.loading && <p role="status">Sending request…</p>}
-          {tracer.error && <p role="alert">{tracer.error}</p>}
-          {tracer.notice && <p role="status">{tracer.notice}</p>}
-          {!result && !tracer.error && !tracer.loading && <p>Enter a URL to send a request.</p>}
-          {result && <div>
-            {tracer.previousResult && <p className="previous-result" role="status">This result is for the previous request.</p>}
-            {result.requestSent && result.statusCode !== null && <p className="response-summary" role="status"><strong>HTTP {result.statusCode}</strong><span>{result.elapsedMilliseconds.toFixed(0)} ms</span></p>}
-            {result.error && <p role={result.requestSent ? "status" : "alert"}>{result.error}</p>}
-            {result.requestSent && result.statusCode !== null && <>
-              <div className="tabs response-tabs" role="tablist" aria-label="Response details">
-                {(["Body", "Headers"] as const).map(value => <button key={value} id={`response-tab-${value.toLowerCase()}`} type="button" role="tab" aria-controls={`response-panel-${value.toLowerCase()}`} aria-selected={tracer.responseTab === value} tabIndex={tracer.responseTab === value ? 0 : -1} onKeyDown={handleResponseTabKeyDown} onClick={() => tracer.setResponseTab(value)}>{value}</button>)}
-              </div>
-              {tracer.responseTab === "Body" && <div id="response-panel-body" role="tabpanel" aria-labelledby="response-tab-body" tabIndex={0}>
-                <pre>{formatResponseBody(result.body) || "The response body is empty."}</pre>
-              </div>}
-              {tracer.responseTab === "Headers" && <div id="response-panel-headers" role="tabpanel" aria-labelledby="response-tab-headers" tabIndex={0} className="response-headers">
-                {Object.entries(result.headers ?? {}).length === 0
-                  ? <p>No response headers.</p>
-                  : <dl>{Object.entries(result.headers ?? {}).map(([name, values]) => <div className="response-header" key={name}>
-                    <dt>{name}</dt>
-                    <dd>{values.map((value, index) => <div key={`${name}-${index}`}>{value}</div>)}</dd>
-                  </div>)}</dl>}
-              </div>}
-            </>}
-          </div>}
-        </section>
+        <ResponsePanel />
       </div>
       {saveRequest.open && <div className="dialog-backdrop" onMouseDown={event => { if (event.target === event.currentTarget) closeSaveDialog(); }}>
         <section className="save-dialog" role="dialog" aria-modal="true" aria-labelledby="save-dialog-title" aria-describedby={saveRequest.error ? "save-error" : undefined} onKeyDown={handleSaveDialogKeyDown}>

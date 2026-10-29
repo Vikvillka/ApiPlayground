@@ -1,0 +1,35 @@
+export const responsePanelStyles = {
+  root: {
+    display: "flex",
+    flexDirection: "column",
+    gap: 2,
+    minWidth: 0,
+  },
+  summary: {
+    display: "flex",
+    alignItems: "baseline",
+    gap: 1.5,
+    fontFamily: "monospace",
+  },
+  previous: {
+    p: 1,
+    borderLeft: "4px solid",
+    borderColor: "#315F83",
+    bgcolor: "#F3F5F7",
+  },
+  body: {
+    m: 0,
+    p: 1.75,
+    maxHeight: 520,
+    overflow: "auto",
+    border: "1px solid",
+    borderColor: "#D9E0E6",
+    borderRadius: 1,
+    bgcolor: "#F3F5F7",
+    whiteSpace: "pre-wrap",
+    overflowWrap: "anywhere",
+    fontFamily: "monospace",
+    fontSize: "0.875rem",
+    lineHeight: 1.5,
+  },
+} as const;

@@ -1,8 +1,22 @@
-import { makeAutoObservable } from "mobx";
+import { HistoryStore } from "./HistoryStore";
+import { RequestEditorStore, type RequestSource } from "./RequestEditorStore";
+import { SaveRequestStore } from "./SaveRequestStore";
+import { TracerStore } from "./TracerStore";
 
-// Request editor, tracer, history, collections, and save-request stores are added in the pure-helpers-and-stores story.
+// Composes the feature stores. Components read and change state through these stores only.
 export class RootStore {
+  readonly editor = new RequestEditorStore();
+  readonly history = new HistoryStore();
+  readonly tracer: TracerStore;
+  readonly saveRequest: SaveRequestStore;
+
   constructor() {
-    makeAutoObservable(this);
+    this.tracer = new TracerStore(this.editor, this.history);
+    this.saveRequest = new SaveRequestStore(this.editor, this.history, this.tracer);
+  }
+
+  restoreRequest(source: RequestSource): void {
+    this.editor.loadRequest(source);
+    this.tracer.reset();
   }
 }

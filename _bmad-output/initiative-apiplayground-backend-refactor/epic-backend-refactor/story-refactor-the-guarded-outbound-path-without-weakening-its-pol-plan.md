@@ -3,7 +3,7 @@ title: 'Refactor the guarded outbound path without weakening its policy'
 type: 'refactor'
 ticket: '6'
 created: '2026-10-28'
-status: 'built'
+status: done
 baseline_revision: '5b561d7f7c659a80dcc4b2ad7f0095189a85f27e'
 route: 'full'
 route_source: 'auto'

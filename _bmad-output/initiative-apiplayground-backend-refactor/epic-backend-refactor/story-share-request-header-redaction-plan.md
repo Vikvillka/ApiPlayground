@@ -3,7 +3,7 @@ title: 'Share request-header redaction'
 type: 'refactor'
 ticket: '1'
 created: '2026-10-28'
-status: 'built'
+status: done
 baseline_revision: 'aa53e5d477da05ccba495d8c6bca6d509c09624c'
 route: 'full'
 route_source: 'pinned'

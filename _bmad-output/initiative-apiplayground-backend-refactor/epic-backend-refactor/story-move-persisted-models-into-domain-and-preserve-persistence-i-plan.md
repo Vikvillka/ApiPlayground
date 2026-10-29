@@ -3,7 +3,7 @@ title: 'Move persisted models into Domain and preserve persistence identity'
 type: 'refactor'
 ticket: '4'
 created: '2026-10-28'
-status: 'built'
+status: done
 baseline_revision: '9bd1fcad69308e7f1757f8a3d0dd08ab2c4d2398'
 route: 'full'
 route_source: 'auto'

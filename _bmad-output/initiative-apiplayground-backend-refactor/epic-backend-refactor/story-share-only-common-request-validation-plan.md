@@ -3,7 +3,7 @@ title: 'Share only common request validation'
 type: 'refactor'
 ticket: '3'
 created: '2026-10-28'
-status: 'built'
+status: done
 baseline_revision: 'b9f3e735579c117c0a268845471193873ee780b3'
 route: 'full'
 route_source: 'pinned'

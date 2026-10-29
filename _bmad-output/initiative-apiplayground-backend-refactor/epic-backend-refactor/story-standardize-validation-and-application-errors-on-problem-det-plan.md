@@ -3,7 +3,7 @@ title: 'Standardize validation and application errors on Problem Details'
 type: 'refactor'
 ticket: '8'
 created: '2026-10-29'
-status: 'built'
+status: done
 baseline_revision: 'd3fa2264b39801f606ad3aa3d52fa98fee0c9e31'
 route: 'full'
 route_source: 'pinned'

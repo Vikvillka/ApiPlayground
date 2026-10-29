@@ -1,7 +1,7 @@
 ---
 title: "Refactor sweep"
 ticket: 5
-status: in-progress
+status: done
 ---
 
 # Plan: Refactor sweep (ticket 1.5)

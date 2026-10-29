@@ -3,7 +3,7 @@ title: 'Migrate remaining application routes to controllers and explicit contrac
 type: 'refactor'
 ticket: '7'
 created: '2026-10-29'
-status: 'built'
+status: done
 baseline_revision: '37842910e0c8833af3b0bfc7d004f1044b80b855'
 route: 'full'
 route_source: 'pinned'

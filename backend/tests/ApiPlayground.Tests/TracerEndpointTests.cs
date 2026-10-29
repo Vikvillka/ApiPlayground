@@ -1,9 +1,12 @@
 using System.Net;
 using System.Net.Http.Json;
 using System.Text;
+using System.Text.Json;
 using ApiPlayground.Application.Outbound;
 using ApiPlayground.Infrastructure.Outbound;
 using Microsoft.AspNetCore.Mvc.Testing;
+using Microsoft.AspNetCore.Mvc.Controllers;
+using Microsoft.AspNetCore.Routing;
 using Microsoft.AspNetCore.TestHost;
 using Microsoft.AspNetCore.Http;
 using Microsoft.Extensions.DependencyInjection;
@@ -410,6 +413,172 @@ public sealed class TracerEndpointTests
     }
 
     [Fact]
+    public async Task History_routes_preserve_list_lookup_wire_shape_redaction_and_bodyless_not_found()
+    {
+        var id = Guid.NewGuid();
+        var historyStore = new InMemoryHistoryStore();
+        await historyStore.SaveAsync(new RequestHistorySnapshot(
+            id,
+            DateTimeOffset.Parse("2026-10-29T12:34:56Z"),
+            "POST",
+            "https://example.test/items?access_token=&mode=full",
+            ["access_token"],
+            new Dictionary<string, string> { ["Authorization"] = string.Empty, ["X-Visible"] = "yes" },
+            ["Authorization"],
+            "{\"hello\":\"world\"}",
+            "None",
+            201,
+            12.5));
+        await using var factory = new WebApplicationFactory<Program>().WithWebHostBuilder(builder => builder.ConfigureTestServices(services =>
+        {
+            services.RemoveAll<IRequestHistoryStore>();
+            services.AddSingleton<IRequestHistoryStore>(historyStore);
+        }));
+        var client = factory.CreateClient();
+
+        using var listRequest = CreateAllowedRequest(string.Empty, HttpMethod.Get, "/api/tracer/history");
+        using var listResponse = await client.SendAsync(listRequest);
+        Assert.Equal(HttpStatusCode.OK, listResponse.StatusCode);
+        using var list = JsonDocument.Parse(await listResponse.Content.ReadAsStringAsync());
+        var listed = Assert.Single(list.RootElement.EnumerateArray().ToArray());
+        AssertHistoryContract(listed, id);
+
+        using var findRequest = CreateAllowedRequest(string.Empty, HttpMethod.Get, $"/api/tracer/history/{id:D}");
+        using var findResponse = await client.SendAsync(findRequest);
+        Assert.Equal(HttpStatusCode.OK, findResponse.StatusCode);
+        using var found = JsonDocument.Parse(await findResponse.Content.ReadAsStringAsync());
+        AssertHistoryContract(found.RootElement, id);
+
+        using var missingRequest = CreateAllowedRequest(string.Empty, HttpMethod.Get, $"/api/tracer/history/{Guid.NewGuid():D}");
+        using var missingResponse = await client.SendAsync(missingRequest);
+        Assert.Equal(HttpStatusCode.NotFound, missingResponse.StatusCode);
+        Assert.Empty(await missingResponse.Content.ReadAsByteArrayAsync());
+
+        using var malformedRequest = CreateAllowedRequest(string.Empty, HttpMethod.Get, "/api/tracer/history/not-a-guid");
+        using var malformedResponse = await client.SendAsync(malformedRequest);
+        Assert.Equal(HttpStatusCode.NotFound, malformedResponse.StatusCode);
+        Assert.Empty(await malformedResponse.Content.ReadAsByteArrayAsync());
+    }
+
+    [Fact]
+    public async Task Application_route_inventory_uses_controller_actions_without_duplicate_minimal_routes()
+    {
+        await using var factory = new WebApplicationFactory<Program>();
+        var routes = factory.Services.GetRequiredService<EndpointDataSource>().Endpoints
+            .OfType<RouteEndpoint>()
+            .Where(endpoint => endpoint.RoutePattern.RawText?.StartsWith("api/tracer/", StringComparison.OrdinalIgnoreCase) == true)
+            .ToArray();
+
+        Assert.Equal(5, routes.Length);
+        Assert.All(routes, endpoint => Assert.NotNull(endpoint.Metadata.GetMetadata<ControllerActionDescriptor>()));
+
+        var routeMethods = routes.Select(endpoint => (
+            endpoint.RoutePattern.RawText,
+            Methods: endpoint.Metadata.GetMetadata<HttpMethodMetadata>()?.HttpMethods.ToArray()))
+            .ToHashSet();
+        Assert.Contains(("api/tracer/get", new[] { "POST" }), routeMethods, RouteMethodComparer.Instance);
+        Assert.Contains(("api/tracer/history", new[] { "GET" }), routeMethods, RouteMethodComparer.Instance);
+        Assert.Contains(("api/tracer/history/{id:guid}", new[] { "GET" }), routeMethods, RouteMethodComparer.Instance);
+        Assert.Contains(("api/tracer/collections", new[] { "GET" }), routeMethods, RouteMethodComparer.Instance);
+        Assert.Contains(("api/tracer/collections/requests", new[] { "POST" }), routeMethods, RouteMethodComparer.Instance);
+    }
+
+    [Theory]
+    [InlineData("GET", "/api/tracer/history")]
+    [InlineData("GET", "/api/tracer/history/10000000-0000-0000-0000-000000000001")]
+    [InlineData("GET", "/api/tracer/collections")]
+    [InlineData("POST", "/api/tracer/collections/requests")]
+    public async Task Every_migrated_route_is_rejected_by_guard_without_required_headers(string method, string path)
+    {
+        await using var factory = new WebApplicationFactory<Program>();
+        using var request = new HttpRequestMessage(new HttpMethod(method), path)
+        {
+            Content = method == "POST" ? new StringContent("{}", Encoding.UTF8, "application/json") : null,
+        };
+
+        using var response = await factory.CreateClient().SendAsync(request);
+        Assert.Equal(HttpStatusCode.Forbidden, response.StatusCode);
+        using var body = JsonDocument.Parse(await response.Content.ReadAsStringAsync());
+        Assert.Equal("Request origin or headers are not allowed.", body.RootElement.GetProperty("error").GetString());
+    }
+
+    [Theory]
+    [InlineData("GET", "/api/tracer/history")]
+    [InlineData("GET", "/api/tracer/history/10000000-0000-0000-0000-000000000001")]
+    [InlineData("GET", "/api/tracer/collections")]
+    [InlineData("POST", "/api/tracer/collections/requests")]
+    public async Task Every_migrated_route_rejects_disallowed_host_and_origin(string method, string path)
+    {
+        await using var factory = new WebApplicationFactory<Program>();
+        var client = factory.CreateClient();
+        foreach (var (host, origin) in new (string Host, string Origin)[]
+        {
+            ("localhost:5001", "http://127.0.0.1:5173"),
+            ("localhost:5000", "http://localhost:5173"),
+        })
+        {
+            using var request = CreateAllowedRequest(string.Empty, new HttpMethod(method), path);
+            request.Headers.Host = host;
+            request.Headers.Remove("Origin");
+            request.Headers.Add("Origin", origin);
+
+            using var response = await client.SendAsync(request);
+            Assert.Equal(HttpStatusCode.Forbidden, response.StatusCode);
+            using var body = JsonDocument.Parse(await response.Content.ReadAsStringAsync());
+            Assert.Equal("Request origin or headers are not allowed.", body.RootElement.GetProperty("error").GetString());
+        }
+    }
+
+    [Theory]
+    [InlineData("GET", "/api/tracer/history")]
+    [InlineData("GET", "/api/tracer/history/10000000-0000-0000-0000-000000000001")]
+    [InlineData("GET", "/api/tracer/collections")]
+    [InlineData("POST", "/api/tracer/collections/requests")]
+    public async Task Every_migrated_route_remains_under_the_path_prefix_body_limit(string method, string path)
+    {
+        await using var factory = new WebApplicationFactory<Program>();
+        using var request = CreateAllowedRequest(string.Empty, new HttpMethod(method), path);
+        request.Content = new StringContent("{\"payload\":\"" + new string('x', 5000) + "\"}", Encoding.UTF8, "application/json");
+
+        using var response = await factory.CreateClient().SendAsync(request);
+        Assert.Equal(HttpStatusCode.RequestEntityTooLarge, response.StatusCode);
+        Assert.Empty(await response.Content.ReadAsByteArrayAsync());
+    }
+
+    [Theory]
+    [InlineData("")]
+    [InlineData("null")]
+    [InlineData("{")]
+    [InlineData("{\"title\":3}")]
+    public async Task Collection_save_preserves_empty_bad_request_for_invalid_body_binding(string json)
+    {
+        await using var factory = new WebApplicationFactory<Program>();
+        using var request = CreateAllowedRequest(string.Empty, path: "/api/tracer/collections/requests");
+        request.Content = new StringContent(json, Encoding.UTF8, "application/json");
+
+        using var response = await factory.CreateClient().SendAsync(request);
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+        Assert.Empty(await response.Content.ReadAsByteArrayAsync());
+    }
+
+    [Fact]
+    public async Task History_store_exceptions_are_not_converted_to_collection_service_errors()
+    {
+        await using var factory = new WebApplicationFactory<Program>().WithWebHostBuilder(builder => builder.ConfigureTestServices(services =>
+        {
+            services.RemoveAll<IRequestHistoryStore>();
+            services.AddSingleton<IRequestHistoryStore>(new ThrowingHistoryStore());
+        }));
+        using var request = CreateAllowedRequest(string.Empty, HttpMethod.Get, "/api/tracer/history");
+
+        using var response = await factory.CreateClient().SendAsync(request);
+        Assert.Equal(HttpStatusCode.InternalServerError, response.StatusCode);
+        var body = await response.Content.ReadAsStringAsync();
+        Assert.DoesNotContain("Collections could not be loaded", body, StringComparison.Ordinal);
+        Assert.Contains("storage unavailable", body, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public async Task Collection_routes_are_guarded_and_save_maps_only_application_data()
     {
         var store = new InMemoryCollectionStore();
@@ -441,10 +610,19 @@ public sealed class TracerEndpointTests
             Assert.Equal(HttpStatusCode.Created, savedResponse.StatusCode);
             var saved = await savedResponse.Content.ReadFromJsonAsync<SavedRequestDto>();
             Assert.NotNull(saved);
+            Assert.NotEqual(Guid.Empty, saved.Id);
+            Assert.NotEqual(default, saved.CreatedAt);
+            Assert.NotEqual(Guid.Empty, saved.CollectionId);
+            Assert.Equal("Reusable", saved.CollectionName);
             Assert.Equal("GET /items", saved.Title);
+            Assert.Equal("GET", saved.Method);
+            Assert.Equal("https://example.test/items?mode=full", saved.Url);
             Assert.Equal(string.Empty, saved.Headers.Single(header => header.Name == "Cookie").Value);
             Assert.True(saved.Headers.Single(header => header.Name == "Cookie").Redacted);
             Assert.Equal("yes", saved.Headers.Single(header => header.Name == "X-Visible").Value);
+            Assert.False(saved.Headers.Single(header => header.Name == "X-Visible").Redacted);
+            Assert.Equal("Cookie", Assert.Single(saved.RedactedHeaders));
+            Assert.Null(saved.Body);
         }
 
         using var listRequest = CreateAllowedRequest(string.Empty, HttpMethod.Get, "/api/tracer/collections");
@@ -452,8 +630,13 @@ public sealed class TracerEndpointTests
         Assert.Equal(HttpStatusCode.OK, listResponse.StatusCode);
         var collections = await listResponse.Content.ReadFromJsonAsync<CollectionDto[]>();
         Assert.NotNull(collections);
-        Assert.Equal("Reusable", Assert.Single(collections!).Name);
-        Assert.Single(collections[0].Requests);
+        var collection = Assert.Single(collections!);
+        Assert.NotEqual(Guid.Empty, collection.Id);
+        Assert.Equal("Reusable", collection.Name);
+        var listedRequest = Assert.Single(collection.Requests);
+        Assert.NotEqual(Guid.Empty, listedRequest.Id);
+        Assert.Equal("GET /items", listedRequest.Title);
+        Assert.Equal("Reusable", listedRequest.CollectionName);
     }
 
     [Fact]
@@ -471,6 +654,52 @@ public sealed class TracerEndpointTests
 
         Assert.Equal(HttpStatusCode.ServiceUnavailable, response.StatusCode);
         Assert.Contains("Collections could not be loaded", body);
+        Assert.DoesNotContain("database password", body, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("Npgsql", body, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public async Task Collection_save_validation_failure_keeps_error_envelope_and_does_not_leak_storage_errors()
+    {
+        await using var factory = new WebApplicationFactory<Program>();
+        using var request = CreateAllowedRequest(string.Empty, path: "/api/tracer/collections/requests");
+        request.Content = JsonContent.Create(new
+        {
+            collectionId = (Guid?)null,
+            newCollectionName = "Reusable",
+            title = " ",
+            method = "GET",
+            url = "https://example.test/items",
+        });
+
+        using var response = await factory.CreateClient().SendAsync(request);
+        var payload = await response.Content.ReadFromJsonAsync<ErrorResponse>();
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+        Assert.Equal("Enter a request title of 1 to 120 characters.", payload?.Error);
+    }
+
+    [Fact]
+    public async Task Collection_save_storage_failure_returns_sanitized_service_unavailable()
+    {
+        await using var factory = new WebApplicationFactory<Program>().WithWebHostBuilder(builder => builder.ConfigureTestServices(services =>
+        {
+            services.RemoveAll<IRequestCollectionStore>();
+            services.AddSingleton<IRequestCollectionStore>(new FailingCollectionStore());
+        }));
+        using var request = CreateAllowedRequest(string.Empty, path: "/api/tracer/collections/requests");
+        request.Content = JsonContent.Create(new
+        {
+            collectionId = (Guid?)null,
+            newCollectionName = "Reusable",
+            title = "GET /items",
+            method = "GET",
+            url = "https://example.test/items",
+        });
+
+        using var response = await factory.CreateClient().SendAsync(request);
+        var body = await response.Content.ReadAsStringAsync();
+        Assert.Equal(HttpStatusCode.ServiceUnavailable, response.StatusCode);
+        Assert.Contains("The request could not be saved. Your request is still available to retry.", body);
         Assert.DoesNotContain("database password", body, StringComparison.OrdinalIgnoreCase);
         Assert.DoesNotContain("Npgsql", body, StringComparison.OrdinalIgnoreCase);
     }
@@ -627,6 +856,24 @@ public sealed class TracerEndpointTests
             services.AddSingleton<IRequestHistoryStore>(new InMemoryHistoryStore());
         }));
 
+    private static void AssertHistoryContract(JsonElement history, Guid id)
+    {
+        Assert.Equal(id, history.GetProperty("id").GetGuid());
+        Assert.Equal("POST", history.GetProperty("method").GetString());
+        Assert.Equal("https://example.test/items?access_token=&mode=full", history.GetProperty("url").GetString());
+        Assert.Equal("{\"hello\":\"world\"}", history.GetProperty("body").GetString());
+        Assert.Equal("None", history.GetProperty("failure").GetString());
+        Assert.Equal(201, history.GetProperty("statusCode").GetInt32());
+        Assert.Equal(12.5, history.GetProperty("elapsedMilliseconds").GetDouble());
+        Assert.Equal("access_token", Assert.Single(history.GetProperty("redactedQueryParameters").EnumerateArray()).GetString());
+        Assert.Equal("Authorization", Assert.Single(history.GetProperty("redactedHeaders").EnumerateArray()).GetString());
+        var headers = history.GetProperty("headers").EnumerateArray().ToArray();
+        Assert.Equal(string.Empty, headers.Single(header => header.GetProperty("name").GetString() == "Authorization").GetProperty("value").GetString());
+        Assert.True(headers.Single(header => header.GetProperty("name").GetString() == "Authorization").GetProperty("redacted").GetBoolean());
+        Assert.Equal("yes", headers.Single(header => header.GetProperty("name").GetString() == "X-Visible").GetProperty("value").GetString());
+        Assert.False(headers.Single(header => header.GetProperty("name").GetString() == "X-Visible").GetProperty("redacted").GetBoolean());
+    }
+
     [Fact]
     public async Task Policy_rejection_is_reported_as_not_sent()
     {
@@ -702,6 +949,28 @@ public sealed class TracerEndpointTests
             Task.FromResult<RequestHistorySnapshot?>(null);
     }
 
+    private sealed class ThrowingHistoryStore : IRequestHistoryStore
+    {
+        public Task SaveAsync(RequestHistorySnapshot snapshot, CancellationToken cancellationToken = default) =>
+            throw new InvalidOperationException("storage unavailable");
+        public Task<IReadOnlyList<RequestHistorySnapshot>> ListAsync(CancellationToken cancellationToken = default) =>
+            throw new InvalidOperationException("storage unavailable");
+        public Task<RequestHistorySnapshot?> FindAsync(Guid id, CancellationToken cancellationToken = default) =>
+            throw new InvalidOperationException("storage unavailable");
+    }
+
+    private sealed class RouteMethodComparer : IEqualityComparer<(string? RoutePattern, string[]? Methods)>
+    {
+        public static RouteMethodComparer Instance { get; } = new();
+
+        public bool Equals((string? RoutePattern, string[]? Methods) left, (string? RoutePattern, string[]? Methods) right) =>
+            string.Equals(left.RoutePattern, right.RoutePattern, StringComparison.Ordinal) &&
+            (left.Methods ?? []).SequenceEqual(right.Methods ?? [], StringComparer.Ordinal);
+
+        public int GetHashCode((string? RoutePattern, string[]? Methods) value) =>
+            HashCode.Combine(value.RoutePattern, value.Methods is null ? 0 : StringComparer.Ordinal.GetHashCode(string.Join(',', value.Methods)));
+    }
+
     private sealed class InMemoryHistoryStore : IRequestHistoryStore
     {
         private readonly List<RequestHistorySnapshot> _items = [];
@@ -743,7 +1012,7 @@ public sealed class TracerEndpointTests
             throw new InvalidOperationException("database password: secret; Npgsql failure details");
 
         public Task<SavedRequestSnapshot> SaveAsync(SavedRequestSnapshot request, Guid? collectionId, string? newCollectionName,
-            CancellationToken cancellationToken = default) => Task.FromResult(request);
+            CancellationToken cancellationToken = default) => throw new InvalidOperationException("database password: secret; Npgsql failure details");
     }
 
     private sealed record TracerResponse(string Failure, int? StatusCode, double ElapsedMilliseconds,
@@ -753,7 +1022,8 @@ public sealed class TracerEndpointTests
     private sealed record ErrorResponse(string Error);
 
     private sealed record HistoryDto(Guid Id, string Url, string[] RedactedQueryParameters);
-    private sealed record SavedRequestDto(Guid Id, string Title, HeaderDto[] Headers);
+    private sealed record SavedRequestDto(Guid Id, DateTimeOffset CreatedAt, Guid CollectionId, string CollectionName,
+        string Title, string Method, string Url, HeaderDto[] Headers, string[] RedactedHeaders, string? Body);
     private sealed record HeaderDto(string Name, string Value, bool Redacted);
     private sealed record CollectionDto(Guid Id, string Name, SavedRequestDto[] Requests);
 }

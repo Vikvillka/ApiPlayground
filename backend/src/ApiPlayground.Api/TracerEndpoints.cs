@@ -48,86 +48,8 @@ public static class TracerEndpoints
     public static void MapTracerEndpoints(this WebApplication app)
     {
         app.MapGet("/health", () => Results.Ok(new { status = "healthy" }));
-        app.MapGet("/api/tracer/history", async (RequestHistoryUseCase useCase, CancellationToken cancellationToken) =>
-        {
-            var items = await useCase.ListAsync(cancellationToken);
-            return Results.Json(items.Select(ToHistoryDto));
-        }).WithMetadata(new TracerRequestGuardMetadata());
-        app.MapGet("/api/tracer/history/{id:guid}", async (Guid id, RequestHistoryUseCase useCase, CancellationToken cancellationToken) =>
-        {
-            var item = await useCase.FindAsync(id, cancellationToken);
-            return item is null ? Results.NotFound() : Results.Json(ToHistoryDto(item));
-        }).WithMetadata(new TracerRequestGuardMetadata());
-        app.MapGet("/api/tracer/collections", async (SaveRequestUseCase useCase, CancellationToken cancellationToken) =>
-        {
-            try
-            {
-                var collections = await useCase.ListAsync(cancellationToken);
-                return Results.Json(collections.Select(collection => new
-                {
-                    id = collection.Id,
-                    name = collection.Name,
-                    requests = collection.Requests.Select(ToSavedRequestDto),
-                }));
-            }
-            catch (Exception)
-            {
-                return Results.Problem("Collections could not be loaded. Try again.", statusCode: StatusCodes.Status503ServiceUnavailable);
-            }
-        }).WithMetadata(new TracerRequestGuardMetadata());
-        app.MapPost("/api/tracer/collections/requests", async (SaveCollectionRequest request, SaveRequestUseCase useCase, CancellationToken cancellationToken) =>
-        {
-            try
-            {
-                var saved = await useCase.SaveAsync(new SaveRequestCommand(request.CollectionId, request.NewCollectionName,
-                    request.Title, request.Method, request.Url, request.Headers ?? new Dictionary<string, string>(), request.Body), cancellationToken);
-                return Results.Json(ToSavedRequestDto(saved), statusCode: StatusCodes.Status201Created);
-            }
-            catch (ArgumentException exception)
-            {
-                return Results.BadRequest(new { error = exception.Message });
-            }
-            catch (Exception)
-            {
-                return Results.Problem("The request could not be saved. Your request is still available to retry.", statusCode: StatusCodes.Status503ServiceUnavailable);
-            }
-        }).WithMetadata(new TracerRequestGuardMetadata());
     }
-
-    private static object ToHistoryDto(RequestHistorySnapshot item) => new
-    {
-        id = item.Id, createdAt = item.CreatedAt, method = item.Method, url = item.Url,
-        redactedQueryParameters = item.RedactedQueryParameters,
-        headers = item.Headers.Select(header => new
-        {
-            name = header.Key, value = item.RedactedHeaders.Contains(header.Key, StringComparer.OrdinalIgnoreCase) ? string.Empty : header.Value,
-            redacted = item.RedactedHeaders.Contains(header.Key, StringComparer.OrdinalIgnoreCase),
-        }),
-        redactedHeaders = item.RedactedHeaders, body = item.Body, failure = item.Failure,
-        statusCode = item.StatusCode, elapsedMilliseconds = item.ElapsedMilliseconds,
-    };
-
-    private static object ToSavedRequestDto(SavedRequestSnapshot item) => new
-    {
-        id = item.Id,
-        createdAt = item.CreatedAt,
-        collectionId = item.CollectionId,
-        collectionName = item.CollectionName,
-        title = item.Title,
-        method = item.Method,
-        url = item.Url,
-        headers = item.Headers.Select(header => new
-        {
-            name = header.Key,
-            value = item.RedactedHeaders.Contains(header.Key, StringComparer.OrdinalIgnoreCase) ? string.Empty : header.Value,
-            redacted = item.RedactedHeaders.Contains(header.Key, StringComparer.OrdinalIgnoreCase),
-        }),
-        redactedHeaders = item.RedactedHeaders,
-        body = item.Body,
-    };
 }
 
-public sealed record SaveCollectionRequest(Guid? CollectionId, string? NewCollectionName, string Title, string Method, string Url,
-    Dictionary<string, string>? Headers = null, string? Body = null);
 [AttributeUsage(AttributeTargets.Class | AttributeTargets.Method)]
 public sealed class TracerRequestGuardMetadata : Attribute;

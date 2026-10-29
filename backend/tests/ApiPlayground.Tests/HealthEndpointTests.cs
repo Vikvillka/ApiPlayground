@@ -21,6 +21,7 @@ public sealed class HealthEndpointTests : IClassFixture<WebApplicationFactory<Pr
         Assert.Equal(System.Net.HttpStatusCode.OK, response.StatusCode);
         using var result = JsonDocument.Parse(await response.Content.ReadAsStringAsync());
 
+        Assert.Single(result.RootElement.EnumerateObject());
         Assert.Equal("healthy", result.RootElement.GetProperty("status").GetString());
     }
 }

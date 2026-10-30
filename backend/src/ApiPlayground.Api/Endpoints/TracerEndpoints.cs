@@ -1,9 +1,15 @@
 using ApiPlayground.Application.Outbound;
+using ApiPlayground.Infrastructure.Outbound;
 
 namespace ApiPlayground.Api;
 
 public static class TracerEndpoints
 {
+    private const int TracerMaxRequestBodyBytes = 4096;
+
+    // The export body carries the response to export, so it may be as large as one outbound response plus JSON escaping.
+    private static readonly int ExportMaxRequestBodyBytes = 2 * OutboundPolicy.MaximumResponseBytes + 64 * 1024;
+
     public static void UseRequestGuard(this WebApplication app)
     {
         var allowedHosts = new HashSet<string>(StringComparer.OrdinalIgnoreCase) { "localhost:5000" };
@@ -14,10 +20,13 @@ public static class TracerEndpoints
                 || context.Request.Path.StartsWithSegments("/api/tracer", StringComparison.OrdinalIgnoreCase);
             if (isTracerRequest)
             {
+                var maxBodyBytes = context.Request.Path.Equals("/api/tracer/export", StringComparison.OrdinalIgnoreCase)
+                    ? ExportMaxRequestBodyBytes
+                    : TracerMaxRequestBodyBytes;
                 var bodyLimit = context.Features.Get<Microsoft.AspNetCore.Http.Features.IHttpMaxRequestBodySizeFeature>();
                 if (bodyLimit is { IsReadOnly: false })
-                    bodyLimit.MaxRequestBodySize = 4096;
-                if (context.Request.ContentLength is > 4096)
+                    bodyLimit.MaxRequestBodySize = maxBodyBytes;
+                if (context.Request.ContentLength is long contentLength && contentLength > maxBodyBytes)
                 {
                     context.Response.StatusCode = StatusCodes.Status413PayloadTooLarge;
                     return;

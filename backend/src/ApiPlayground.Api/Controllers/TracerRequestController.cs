@@ -13,12 +13,44 @@ namespace ApiPlayground.Api;
 public sealed class TracerRequestController(GetTracerUseCase useCase, IOptions<HttpJsonOptions> jsonOptions) : ApiControllerBase
 {
     [HttpPost("get")]
-    public Task<IActionResult> Get(CancellationToken cancellationToken) => ExecuteAsync(cancellationToken, export: false);
+    public Task<IActionResult> Get(CancellationToken cancellationToken) => ExecuteAsync(cancellationToken);
 
+    // Exports the response the client already holds. The target request is not sent again.
     [HttpPost("export")]
-    public Task<IActionResult> Export(CancellationToken cancellationToken) => ExecuteAsync(cancellationToken, export: true);
+    public async Task<IActionResult> Export(CancellationToken cancellationToken)
+    {
+        ExportBody? body;
+        try
+        {
+            body = await JsonSerializer.DeserializeAsync<ExportBody>(Request.Body, jsonOptions.Value.SerializerOptions, cancellationToken);
+        }
+        catch (JsonException)
+        {
+            return BadRequest();
+        }
 
-    private async Task<IActionResult> ExecuteAsync(CancellationToken cancellationToken, bool export)
+        if (body?.Request is null || body.Response is null)
+        {
+            return BadRequest();
+        }
+
+        var validationError = Validate(body.Request, out _);
+        if (validationError is not null)
+        {
+            return BadRequestProblem(validationError);
+        }
+
+        if (string.IsNullOrEmpty(body.Response.Failure) ||
+            !Enum.TryParse<OutboundFailure>(body.Response.Failure, out var failure) ||
+            !Enum.IsDefined(failure))
+        {
+            return BadRequestProblem("The export response has an unknown failure value.");
+        }
+
+        return ToExportResponse(body.Request, body.Response, failure);
+    }
+
+    private async Task<IActionResult> ExecuteAsync(CancellationToken cancellationToken)
     {
         TracerRequest? request;
         try
@@ -50,11 +82,6 @@ public sealed class TracerRequestController(GetTracerUseCase useCase, IOptions<H
         }
 
         var outbound = result.Outbound;
-        if (export)
-        {
-            return ToExportResponse(request, ToPayload(result));
-        }
-
         if (!outbound.Succeeded && outbound.Failure != OutboundFailure.PolicyRejected)
         {
             return new JsonResult(ToPayload(result)) { StatusCode = FailureStatusCode(outbound.Failure) };
@@ -63,9 +90,16 @@ public sealed class TracerRequestController(GetTracerUseCase useCase, IOptions<H
         return new JsonResult(ToPayload(result)) { StatusCode = SuccessStatusCode(outbound.Failure) };
     }
 
-    private IActionResult ToExportResponse(TracerRequest request, object response)
+    private IActionResult ToExportResponse(TracerRequest request, ExportedResponse response, OutboundFailure failure)
     {
         Response.Headers.ContentDisposition = "attachment; filename=\"apiplayground-export.json\"";
+        // The status matches the send endpoint for the same outcome, so an exported failure is not reported as 200.
+        var statusCode = failure switch
+        {
+            OutboundFailure.None => StatusCodes.Status200OK,
+            OutboundFailure.PolicyRejected => StatusCodes.Status403Forbidden,
+            _ => FailureStatusCode(failure),
+        };
         return new JsonResult(new
         {
             format = "apiplayground.export.v1",
@@ -76,8 +110,18 @@ public sealed class TracerRequestController(GetTracerUseCase useCase, IOptions<H
                 headers = request.Headers ?? new Dictionary<string, string>(),
                 body = request.Body,
             },
-            response,
-        }) { StatusCode = StatusCodes.Status200OK };
+            response = new
+            {
+                failure = failure.ToString(),
+                statusCode = response.StatusCode,
+                elapsedMilliseconds = response.ElapsedMilliseconds,
+                headers = response.Headers ?? new Dictionary<string, IReadOnlyList<string>>(),
+                body = response.Body ?? string.Empty,
+                error = response.Error,
+                requestSent = response.RequestSent,
+                historySaved = response.HistorySaved,
+            },
+        }) { StatusCode = statusCode };
     }
 
     private static string? Validate(TracerRequest request, out Uri? uri)
@@ -175,3 +219,15 @@ public sealed class TracerRequestController(GetTracerUseCase useCase, IOptions<H
         }
     }
 }
+
+public sealed record ExportBody(TracerRequest? Request, ExportedResponse? Response);
+
+public sealed record ExportedResponse(
+    string? Failure,
+    int? StatusCode,
+    double ElapsedMilliseconds,
+    Dictionary<string, IReadOnlyList<string>>? Headers,
+    string? Body,
+    string? Error,
+    bool RequestSent,
+    bool? HistorySaved);

@@ -912,14 +912,12 @@ public sealed class TracerEndpointTests
     }
 
     [Fact]
-    public async Task Export_returns_request_and_response_as_a_json_attachment()
+    public async Task Export_returns_the_held_response_as_a_json_attachment_without_sending_the_target()
     {
-        var outbound = new OutboundResult(OutboundFailure.None, 200, TimeSpan.FromMilliseconds(5),
-            new Dictionary<string, IReadOnlyList<string>> { ["X-Test"] = ["value"] },
-            Encoding.UTF8.GetBytes("exported"), DispatchStarted: true);
-        await using var factory = CreateFactory(new FixedResultExecutor(outbound));
+        var executor = new RecordingExecutor();
+        await using var factory = CreateFactory(executor);
         using var request = CreateAllowedRequest("https://example.test/", null, "/api/tracer/export");
-        request.Content = JsonContent.Create(new { url = "https://example.test/", method = "POST", body = "{\"a\":1}" });
+        request.Content = JsonContent.Create(ExportBody());
 
         using var response = await factory.CreateClient().SendAsync(request);
         using var document = JsonDocument.Parse(await response.Content.ReadAsStringAsync());
@@ -931,13 +929,50 @@ public sealed class TracerEndpointTests
         Assert.Equal("apiplayground.export.v1", root.GetProperty("format").GetString());
         var exportedRequest = root.GetProperty("request");
         Assert.Equal("https://example.test/", exportedRequest.GetProperty("url").GetString());
-        Assert.Equal("POST", exportedRequest.GetProperty("method").GetString());
         Assert.Equal("{\"a\":1}", exportedRequest.GetProperty("body").GetString());
         var exportedResponse = root.GetProperty("response");
         Assert.Equal("None", exportedResponse.GetProperty("failure").GetString());
         Assert.Equal(200, exportedResponse.GetProperty("statusCode").GetInt32());
         Assert.Equal("exported", exportedResponse.GetProperty("body").GetString());
         Assert.True(exportedResponse.GetProperty("requestSent").GetBoolean());
+        Assert.Equal(0, executor.Calls);
+    }
+
+    [Theory]
+    [InlineData("Timeout", 504)]
+    [InlineData("Cancelled", 499)]
+    [InlineData("PolicyRejected", 403)]
+    public async Task Export_mirrors_the_send_status_for_a_failed_response(string failure, int expectedStatus)
+    {
+        var executor = new RecordingExecutor();
+        await using var factory = CreateFactory(executor);
+        using var request = CreateAllowedRequest("https://example.test/", null, "/api/tracer/export");
+        request.Content = JsonContent.Create(ExportBody(failure: failure, statusCode: null, body: string.Empty));
+
+        using var response = await factory.CreateClient().SendAsync(request);
+        using var document = JsonDocument.Parse(await response.Content.ReadAsStringAsync());
+
+        Assert.Equal((HttpStatusCode)expectedStatus, response.StatusCode);
+        Assert.Equal("attachment", response.Content.Headers.ContentDisposition?.DispositionType);
+        Assert.Equal(failure, document.RootElement.GetProperty("response").GetProperty("failure").GetString());
+        Assert.Equal(0, executor.Calls);
+    }
+
+    [Fact]
+    public async Task Export_rejects_an_unknown_failure_value_without_dispatch()
+    {
+        var executor = new RecordingExecutor();
+        await using var factory = CreateFactory(executor);
+        using var request = CreateAllowedRequest("https://example.test/", null, "/api/tracer/export");
+        request.Content = JsonContent.Create(ExportBody(failure: "Bogus"));
+
+        using var response = await factory.CreateClient().SendAsync(request);
+        var payload = await response.Content.ReadFromJsonAsync<ProblemResponse>();
+
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+        Assert.Equal("application/problem+json", response.Content.Headers.ContentType?.MediaType);
+        Assert.Equal("The export response has an unknown failure value.", payload?.Detail);
+        Assert.Equal(0, executor.Calls);
     }
 
     [Fact]
@@ -946,6 +981,7 @@ public sealed class TracerEndpointTests
         var executor = new RecordingExecutor();
         await using var factory = CreateFactory(executor);
         using var request = CreateAllowedRequest("not-a-url", null, "/api/tracer/export");
+        request.Content = JsonContent.Create(ExportBody(url: "not-a-url"));
 
         using var response = await factory.CreateClient().SendAsync(request);
         var payload = await response.Content.ReadFromJsonAsync<ProblemResponse>();
@@ -955,6 +991,49 @@ public sealed class TracerEndpointTests
         Assert.Equal("Enter a valid absolute HTTP or HTTPS URL without credentials or fragments.", payload?.Detail);
         Assert.Equal(0, executor.Calls);
     }
+
+    [Fact]
+    public async Task Export_accepts_a_body_above_the_send_limit_while_send_still_rejects_it()
+    {
+        var executor = new FixedResultExecutor(new OutboundResult(OutboundFailure.None, 200, TimeSpan.FromMilliseconds(5),
+            new Dictionary<string, IReadOnlyList<string>>(), Encoding.UTF8.GetBytes("ok"), DispatchStarted: true));
+        await using var factory = CreateFactory(executor);
+        var largeBody = new string('x', 8000);
+
+        using var exportRequest = CreateAllowedRequest("https://example.test/", null, "/api/tracer/export");
+        exportRequest.Content = JsonContent.Create(ExportBody(body: largeBody));
+        using var exportResponse = await factory.CreateClient().SendAsync(exportRequest);
+        using var document = JsonDocument.Parse(await exportResponse.Content.ReadAsStringAsync());
+
+        Assert.Equal(HttpStatusCode.OK, exportResponse.StatusCode);
+        Assert.Equal(largeBody, document.RootElement.GetProperty("response").GetProperty("body").GetString());
+
+        using var sendRequest = CreateAllowedRequest("https://example.test/", null, "/api/tracer/get");
+        sendRequest.Content = JsonContent.Create(new { url = "https://example.test/", method = "GET", body = largeBody });
+        using var sendResponse = await factory.CreateClient().SendAsync(sendRequest);
+
+        Assert.Equal(HttpStatusCode.RequestEntityTooLarge, sendResponse.StatusCode);
+    }
+
+    private static object ExportBody(
+        string url = "https://example.test/",
+        string failure = "None",
+        int? statusCode = 200,
+        string body = "exported") => new
+    {
+        request = new { url, method = "POST", body = "{\"a\":1}" },
+        response = new
+        {
+            failure,
+            statusCode,
+            elapsedMilliseconds = 5.0,
+            headers = new Dictionary<string, string[]> { ["X-Test"] = ["value"] },
+            body,
+            error = (string?)null,
+            requestSent = true,
+            historySaved = true,
+        },
+    };
 
     private static WebApplicationFactory<Program> CreateFactory(IOutboundRequestExecutor executor) =>
         new WebApplicationFactory<Program>().WithWebHostBuilder(builder => builder.ConfigureTestServices(services =>

@@ -3,10 +3,11 @@ import { observer } from "mobx-react-lite";
 import { Box, Chip, Tab, Tabs, Typography } from "@mui/material";
 import { formatResponseBody, type ResponseTab } from "../../request/requestHelpers";
 import { useRootStore } from "../../stores/StoreContext";
+import { CodeSnippet } from "../CodeSnippet/CodeSnippet";
 import { ResponseHeaders } from "../ResponseHeaders/ResponseHeaders";
 import { responsePanelStyles } from "./ResponsePanel.styles";
 
-const responseTabs: readonly ResponseTab[] = ["Body", "Headers"];
+const responseTabs: readonly ResponseTab[] = ["Body", "Headers", "Code"];
 
 const tabId = (value: ResponseTab) => `response-tab-${value.toLowerCase()}`;
 const panelId = (value: ResponseTab) => `response-panel-${value.toLowerCase()}`;
@@ -103,6 +104,11 @@ export const ResponsePanel = observer(function ResponsePanel() {
               {tracer.responseTab === "Headers" && (
                 <Box role="tabpanel" id={panelId("Headers")} aria-labelledby={tabId("Headers")} tabIndex={0}>
                   <ResponseHeaders headers={result.headers ?? {}} />
+                </Box>
+              )}
+              {tracer.responseTab === "Code" && (
+                <Box role="tabpanel" id={panelId("Code")} aria-labelledby={tabId("Code")} tabIndex={0}>
+                  <CodeSnippet />
                 </Box>
               )}
             </>

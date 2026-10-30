@@ -2,7 +2,7 @@ import type { TracerRequest } from "../api/types";
 
 export type RequestMethod = TracerRequest["method"];
 export type RequestTab = "Params" | "Headers" | "Body";
-export type ResponseTab = "Body" | "Headers";
+export type ResponseTab = "Body" | "Headers" | "Code";
 
 export type RequestRow = { id: number; key: string; value: string; enabled: boolean; redacted?: boolean };
 

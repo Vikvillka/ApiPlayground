@@ -1,6 +1,6 @@
 import { makeAutoObservable, runInAction } from "mobx";
 import { sendTracerRequest } from "../api/tracerApi";
-import type { TracerResponse } from "../api/types";
+import type { TracerRequest, TracerResponse } from "../api/types";
 import { errorMessage, type ResponseTab } from "../request/requestHelpers";
 import type { RequestEditorStore } from "./RequestEditorStore";
 import type { HistoryStore } from "./HistoryStore";
@@ -10,6 +10,8 @@ const historySavedNotice = "The request was sent, but its History entry was not 
 export class TracerStore {
   loading = false;
   result: TracerResponse | null = null;
+  // The request that produced `result`, so export matches the response even after the editor changes.
+  resultRequest: TracerRequest | null = null;
   error: string | null = null;
   previousResult = false;
   notice: string | null = null;
@@ -33,6 +35,7 @@ export class TracerStore {
 
   reset(): void {
     this.result = null;
+    this.resultRequest = null;
     this.error = null;
     this.notice = null;
     this.previousResult = false;
@@ -45,10 +48,12 @@ export class TracerStore {
     this.loading = true;
     this.error = null;
     this.notice = null;
+    const sentRequest = this.editor.tracerRequest;
     try {
-      const response = await sendTracerRequest(this.editor.tracerRequest);
+      const response = await sendTracerRequest(sentRequest);
       runInAction(() => {
         this.result = response;
+        this.resultRequest = sentRequest;
         this.responseTab = "Body";
         this.previousResult = false;
         if (response.historySaved === false) this.notice = historySavedNotice;

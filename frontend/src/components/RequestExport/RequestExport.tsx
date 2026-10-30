@@ -20,17 +20,20 @@ export function downloadJson(fileName: string, text: string): void {
   setTimeout(() => URL.revokeObjectURL(url), 0);
 }
 
-// Exports the current request as a JSON document from the backend and saves it as a file.
+// Exports the response already received as a JSON document from the backend and saves it as a file.
 export const RequestExport = observer(function RequestExport() {
-  const { editor } = useRootStore();
+  const { tracer } = useRootStore();
   const [exporting, setExporting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const exportJson = async () => {
+    const request = tracer.resultRequest;
+    const response = tracer.result;
+    if (!request || !response) return;
     setExporting(true);
     setError(null);
     try {
-      const document = await exportTracerRequest(editor.tracerRequest);
+      const document = await exportTracerRequest(request, response);
       downloadJson(exportFileName, JSON.stringify(document, null, 2));
     } catch (cause) {
       setError(errorMessage(cause, "The export could not be completed."));
@@ -46,7 +49,7 @@ export const RequestExport = observer(function RequestExport() {
         size="small"
         variant="outlined"
         startIcon={<FileDownloadOutlined />}
-        disabled={!editor.canSend || exporting}
+        disabled={tracer.result === null || exporting}
         onClick={exportJson}
       >
         Export JSON

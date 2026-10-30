@@ -49,25 +49,34 @@ describe("tracer API request layer", () => {
     ).resolves.toEqual(observed);
   });
 
-  it("exports a request with POST to the export endpoint and the same headers", async () => {
+  it("exports the held request and response with POST to the export endpoint and the same headers", async () => {
     const request = { url: "https://example.com", method: "GET" as const, headers: {} };
+    const response = { failure: "None", statusCode: 200, elapsedMilliseconds: 5, headers: {}, body: "ok", error: null, requestSent: true };
     const document = { format: "apiplayground.export.v1" };
     fetchMock.mockResolvedValue(jsonResponse(document));
 
-    await expect(exportTracerRequest(request)).resolves.toEqual(document);
+    await expect(exportTracerRequest(request, response)).resolves.toEqual(document);
 
     expect(fetchMock).toHaveBeenCalledWith("/api/tracer/export", {
       method: "POST",
       headers: expectedHeaders,
-      body: JSON.stringify(request),
+      body: JSON.stringify({ request, response }),
     });
+  });
+
+  it("returns the export document of a failed response, whatever its HTTP status", async () => {
+    const response = { failure: "Timeout", statusCode: null, elapsedMilliseconds: 30000, headers: {}, body: "", error: "timed out", requestSent: true };
+    const document = { format: "apiplayground.export.v1", response: { failure: "Timeout" } };
+    fetchMock.mockResolvedValue(jsonResponse(document, 504));
+
+    await expect(exportTracerRequest({ url: "https://example.com", method: "GET", headers: {} }, response)).resolves.toEqual(document);
   });
 
   it("throws the Problem Details message when export fails", async () => {
     fetchMock.mockResolvedValue(jsonResponse({ detail: "Enter a valid URL." }, 400));
 
     await expect(
-      exportTracerRequest({ url: "bad", method: "GET", headers: {} }),
+      exportTracerRequest({ url: "bad", method: "GET", headers: {} }, { failure: "None", statusCode: 200, elapsedMilliseconds: 0, headers: {}, body: "", error: null, requestSent: true }),
     ).rejects.toThrow("Enter a valid URL.");
   });
 

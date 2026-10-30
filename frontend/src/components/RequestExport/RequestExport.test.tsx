@@ -1,8 +1,22 @@
 import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { runInAction } from "mobx";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { ReactNode } from "react";
+import type { TracerRequest, TracerResponse } from "../../api/types";
 import { RootStoreProvider, useRootStore } from "../../stores/StoreContext";
 import { RequestExport } from "./RequestExport";
+
+const sentRequest: TracerRequest = { url: "https://example.com/items", method: "GET", headers: {} };
+const sentResponse: TracerResponse = {
+  failure: "None",
+  statusCode: 200,
+  elapsedMilliseconds: 12,
+  headers: {},
+  body: "ok",
+  error: null,
+  requestSent: true,
+  historySaved: true,
+};
 
 function Wrapper({ children, onReady }: { children: ReactNode; onReady: (store: ReturnType<typeof useRootStore>) => void }) {
   const store = useRootStore();
@@ -53,7 +67,7 @@ describe("RequestExport", () => {
     Reflect.deleteProperty(URL, "revokeObjectURL");
   });
 
-  function setup() {
+  function setup(withResult = true) {
     let store: ReturnType<typeof useRootStore> | undefined;
     render(
       <RootStoreProvider>
@@ -62,10 +76,21 @@ describe("RequestExport", () => {
         </Wrapper>
       </RootStoreProvider>,
     );
-    act(() => {
-      store!.editor.setUrl("https://example.com/items");
-    });
+    if (withResult) {
+      act(() => {
+        runInAction(() => {
+          store!.tracer.resultRequest = sentRequest;
+          store!.tracer.result = sentResponse;
+        });
+      });
+    }
   }
+
+  it("is disabled until a response has been received", () => {
+    setup(false);
+
+    expect(screen.getByRole("button", { name: "Export JSON" })).toBeDisabled();
+  });
 
   it("saves the export as a JSON file named apiplayground-export.json", async () => {
     const document = { format: "apiplayground.export.v1" };
@@ -75,7 +100,19 @@ describe("RequestExport", () => {
     fireEvent.click(screen.getByRole("button", { name: "Export JSON" }));
 
     await waitFor(() => expect(downloadNames).toEqual(["apiplayground-export.json"]));
+    expect(JSON.parse(fetchMock.mock.calls[0][1].body)).toEqual({ request: sentRequest, response: sentResponse });
     expect(downloadedBlobs).toHaveLength(1);
+    await expect(readBlob(downloadedBlobs[0])).resolves.toBe(JSON.stringify(document, null, 2));
+  });
+
+  it("saves the export of a failed response, keeping the failure in the document", async () => {
+    const document = { format: "apiplayground.export.v1", response: { failure: "Timeout" } };
+    fetchMock.mockResolvedValue(jsonResponse(document, 504));
+    setup();
+
+    fireEvent.click(screen.getByRole("button", { name: "Export JSON" }));
+
+    await waitFor(() => expect(downloadNames).toEqual(["apiplayground-export.json"]));
     await expect(readBlob(downloadedBlobs[0])).resolves.toBe(JSON.stringify(document, null, 2));
   });
 

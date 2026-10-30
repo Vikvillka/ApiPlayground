@@ -22,12 +22,17 @@ export async function sendTracerRequest(request: TracerRequest): Promise<TracerR
   throw new Error(messageFrom(result.body, `Tracer request failed with HTTP ${result.status}.`));
 }
 
-// The export endpoint takes the same body as the send endpoint and returns the export document as JSON.
-export async function exportTracerRequest(request: TracerRequest): Promise<unknown> {
-  const result = await apiFetch("/api/tracer/export", "POST", request);
+function isExportDocument(body: unknown): boolean {
+  return typeof body === "object" && body !== null && "format" in body && body.format === "apiplayground.export.v1";
+}
+
+// The export endpoint takes the request and the response already received; the target is not sent again.
+// Its HTTP status mirrors the send outcome, so a failed response still returns the export document in the body.
+export async function exportTracerRequest(request: TracerRequest, response: TracerResponse): Promise<unknown> {
+  const result = await apiFetch("/api/tracer/export", "POST", { request, response });
+  if (isExportDocument(result.body)) return result.body;
   if (!result.ok) throw new Error(messageFrom(result.body, `Export failed (HTTP ${result.status}).`));
-  if (result.body === null) throw new Error("The export could not be read.");
-  return result.body;
+  throw new Error("The export could not be read.");
 }
 
 export async function getTracerHistory(): Promise<HistoryItem[]> {

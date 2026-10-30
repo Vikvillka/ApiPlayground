@@ -90,4 +90,30 @@ test("local MVP dispatch, History replay, policy rejection, and Collection reuse
   expect(await readHits()).toBe(hitsBeforeCollectionLoad);
   await expect(page.getByLabel("Request URL")).toHaveValue(expectedUrl);
   await expect(page.getByRole("tablist", { name: "Response details" })).toHaveCount(0);
+
+  // Code snippet, Copy, and Export JSON. Export takes the response already received
+  // and does not send the target again, so hit counts are not affected by it.
+  await page.getByRole("button", { name: "Send", exact: true }).click();
+  await expect(page.getByRole("status").filter({ hasText: "HTTP 200" })).toBeVisible();
+  await page.getByRole("tab", { name: "Code", exact: true }).click();
+  const snippet = page.getByRole("tabpanel").locator("pre");
+  await expect(snippet).toContainText(expectedUrl);
+  await page.getByRole("button", { name: "JavaScript fetch", exact: true }).click();
+  await expect(snippet).toContainText("fetch(");
+  await page.getByRole("button", { name: "curl", exact: true }).click();
+  await expect(snippet).toContainText("curl");
+
+  await page.context().grantPermissions(["clipboard-read", "clipboard-write"], { origin: new URL(page.url()).origin });
+  await page.getByRole("button", { name: "Copy", exact: true }).click();
+  await expect(page.getByRole("status").filter({ hasText: "Copied" })).toBeVisible();
+  const copiedText = await page.evaluate(() => navigator.clipboard.readText());
+  expect(copiedText).toBe(await snippet.textContent());
+
+  const downloadPromise = page.waitForEvent("download");
+  await page.getByRole("button", { name: "Export JSON", exact: true }).click();
+  const download = await downloadPromise;
+  expect(download.suggestedFilename()).toBe("apiplayground-export.json");
+  const exported = JSON.parse(await fs.readFile((await download.path())!, "utf8")) as { format?: string; request?: { url?: string } };
+  expect(exported.format).toBe("apiplayground.export.v1");
+  expect(exported.request?.url).toBe(expectedUrl);
 });

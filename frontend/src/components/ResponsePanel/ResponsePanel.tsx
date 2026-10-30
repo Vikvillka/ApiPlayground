@@ -4,6 +4,7 @@ import { Box, Chip, Tab, Tabs, Typography } from "@mui/material";
 import { formatResponseBody, type ResponseTab } from "../../request/requestHelpers";
 import { useRootStore } from "../../stores/StoreContext";
 import { CodeSnippet } from "../CodeSnippet/CodeSnippet";
+import { RequestExport } from "../RequestExport/RequestExport";
 import { ResponseHeaders } from "../ResponseHeaders/ResponseHeaders";
 import { responsePanelStyles } from "./ResponsePanel.styles";
 
@@ -75,6 +76,7 @@ export const ResponsePanel = observer(function ResponsePanel() {
           )}
           {hasDetails && (
             <>
+              <RequestExport />
               <Box onKeyDown={handleTabKeyDown}>
                 <Tabs
                   value={tracer.responseTab}

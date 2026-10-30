@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { getTracerHistory, saveTracerRequest, sendTracerRequest } from "./tracerApi";
+import { exportTracerRequest, getTracerHistory, saveTracerRequest, sendTracerRequest } from "./tracerApi";
 
 const expectedHeaders = {
   "Content-Type": "application/json",
@@ -47,6 +47,28 @@ describe("tracer API request layer", () => {
     await expect(
       sendTracerRequest({ url: "http://localhost", method: "GET", headers: {} }),
     ).resolves.toEqual(observed);
+  });
+
+  it("exports a request with POST to the export endpoint and the same headers", async () => {
+    const request = { url: "https://example.com", method: "GET" as const, headers: {} };
+    const document = { format: "apiplayground.export.v1" };
+    fetchMock.mockResolvedValue(jsonResponse(document));
+
+    await expect(exportTracerRequest(request)).resolves.toEqual(document);
+
+    expect(fetchMock).toHaveBeenCalledWith("/api/tracer/export", {
+      method: "POST",
+      headers: expectedHeaders,
+      body: JSON.stringify(request),
+    });
+  });
+
+  it("throws the Problem Details message when export fails", async () => {
+    fetchMock.mockResolvedValue(jsonResponse({ detail: "Enter a valid URL." }, 400));
+
+    await expect(
+      exportTracerRequest({ url: "bad", method: "GET", headers: {} }),
+    ).rejects.toThrow("Enter a valid URL.");
   });
 
   it("loads history with GET and the same headers", async () => {

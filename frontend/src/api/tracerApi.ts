@@ -22,6 +22,14 @@ export async function sendTracerRequest(request: TracerRequest): Promise<TracerR
   throw new Error(messageFrom(result.body, `Tracer request failed with HTTP ${result.status}.`));
 }
 
+// The export endpoint takes the same body as the send endpoint and returns the export document as JSON.
+export async function exportTracerRequest(request: TracerRequest): Promise<unknown> {
+  const result = await apiFetch("/api/tracer/export", "POST", request);
+  if (!result.ok) throw new Error(messageFrom(result.body, `Export failed (HTTP ${result.status}).`));
+  if (result.body === null) throw new Error("The export could not be read.");
+  return result.body;
+}
+
 export async function getTracerHistory(): Promise<HistoryItem[]> {
   const result = await apiFetch("/api/tracer/history", "GET");
   const fallback = `History could not be loaded (HTTP ${result.status}).`;

@@ -2,6 +2,7 @@ import { observer } from "mobx-react-lite";
 import { Box, Button, Typography } from "@mui/material";
 import type { HistoryItem } from "../../api/types";
 import { useRootStore } from "../../stores/StoreContext";
+import { methodBadgeSx } from "../RequestLine/RequestLine.styles";
 import { historyListStyles } from "./HistoryList.styles";
 
 // Lists dispatched requests; loading one restores it into the editor without sending.
@@ -29,17 +30,17 @@ export const HistoryList = observer(function HistoryList() {
         <Box component="li" key={item.id}>
           <Button
             variant="outlined"
-            fullWidth
             disabled={tracer.loading}
             onClick={() => load(item)}
             aria-label={`Load ${item.method} ${new URL(item.url).pathname}`}
             sx={historyListStyles.button}
           >
-            <Box component="span" sx={historyListStyles.title}>
-              <strong>{item.method}</strong> {item.statusCode ? `HTTP ${item.statusCode}` : item.failure}
-            </Box>
-            <Box component="small" sx={historyListStyles.meta}>
-              {new URL(item.url).pathname} · {new Date(item.createdAt).toLocaleString()}
+            <Box component="span" sx={methodBadgeSx(item.method)}>{item.method}</Box>
+            <Box sx={historyListStyles.text}>
+              <Box component="span" sx={historyListStyles.title}>{new URL(item.url).pathname}</Box>
+              <Box component="small" sx={historyListStyles.meta}>
+                {item.statusCode ? `HTTP ${item.statusCode}` : item.failure} · {new Date(item.createdAt).toLocaleString()}
+              </Box>
             </Box>
           </Button>
         </Box>

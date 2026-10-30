@@ -1,12 +1,8 @@
-import { panelCardStyles } from "../../theme/panelStyles";
+import { panelCardStyles, segmentedTabsSx } from "../../theme/panelStyles";
 
 export const responsePanelStyles = {
   root: panelCardStyles,
-  tabs: {
-    minHeight: 40,
-    borderBottom: 1,
-    borderColor: "divider",
-  },
+  tabs: segmentedTabsSx,
   summary: {
     display: "flex",
     alignItems: "center",
@@ -29,8 +25,8 @@ export const responsePanelStyles = {
     maxHeight: 520,
     overflow: "auto",
     borderRadius: "10px",
-    bgcolor: "#0f172a",
-    color: "#e2e8f0",
+    bgcolor: "#f3f4f6",
+    color: "#111827",
     whiteSpace: "pre-wrap",
     overflowWrap: "anywhere",
     fontFamily: 'ui-monospace, SFMono-Regular, Consolas, "Liberation Mono", monospace',

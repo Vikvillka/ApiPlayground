@@ -10,6 +10,12 @@ import { responsePanelStyles } from "./ResponsePanel.styles";
 
 const responseTabs: readonly ResponseTab[] = ["Body", "Headers", "Code"];
 
+// Human-readable size of the response body in UTF-8 bytes, for example "512 B" or "2.3 KB".
+function formatBodySize(body: string | null): string {
+  const bytes = new TextEncoder().encode(body ?? "").length;
+  return bytes < 1024 ? `${bytes} B` : `${(bytes / 1024).toFixed(1)} KB`;
+}
+
 const tabId = (value: ResponseTab) => `response-tab-${value.toLowerCase()}`;
 const panelId = (value: ResponseTab) => `response-panel-${value.toLowerCase()}`;
 
@@ -67,6 +73,7 @@ export const ResponsePanel = observer(function ResponsePanel() {
                 label={`HTTP ${result.statusCode}`}
               />
               <span>{result.elapsedMilliseconds.toFixed(0)} ms</span>
+              <span>{formatBodySize(result.body)}</span>
             </Box>
           )}
           {result.error && (

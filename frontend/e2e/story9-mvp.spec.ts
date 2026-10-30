@@ -34,6 +34,7 @@ test("local MVP dispatch, History replay, policy rejection, and Collection reuse
   expect(await readTargetRequest()).toMatchObject({ method: "POST", url: expectedUrl, header: "browser-e2e", body: '{"payload":"story9"}' });
 
   await page.getByRole("button", { name: "Show History & Collections" }).click();
+  await page.getByRole("button", { name: /^History/ }).click();
   await expect(page.getByRole("button", { name: new RegExp("Load POST /") })).toBeVisible();
   const beforeSelectHits = await readHits();
   const historyItems = page.getByRole("button", { name: new RegExp("Load POST /") });
@@ -84,6 +85,7 @@ test("local MVP dispatch, History replay, policy rejection, and Collection reuse
   await page.getByRole("button", { name: "Send", exact: true }).click();
   await expect(page.getByText('"ok": true,\n  "marker": "story9"')).toBeVisible();
   await page.getByRole("button", { name: "Show History & Collections" }).click();
+  await page.getByRole("button", { name: /^Collections/ }).click();
   await expect(page.getByRole("button", { name: "Load saved GET Story 9 fixture request" })).toBeVisible();
   const hitsBeforeCollectionLoad = await readHits();
   await page.getByRole("button", { name: "Load saved GET Story 9 fixture request" }).click();

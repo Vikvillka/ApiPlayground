@@ -45,6 +45,7 @@ export const RequestLine = observer(function RequestLine() {
       <Button
         type="submit"
         variant="contained"
+        fullWidth
         startIcon={<PlayArrowIcon />}
         disabled={!editor.canSend || busy}
         aria-describedby={editor.hiddenValidationError ? "send-validation-error" : undefined}

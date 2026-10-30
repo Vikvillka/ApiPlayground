@@ -30,6 +30,7 @@ describe("request workspace", () => {
     fireEvent.change(screen.getByLabelText("Request URL"), { target: { value: "https://example.test/current" } });
     fireEvent.click(screen.getByRole("button", { name: "Send" }));
     fireEvent.click(screen.getByRole("button", { name: "Show History & Collections" }));
+    fireEvent.click(screen.getByRole("button", { name: /^History/ }));
     const item = await screen.findByRole("button", { name: "Load GET /previous" });
     expect(item).toBeDisabled();
 
@@ -71,6 +72,7 @@ describe("request workspace", () => {
     await waitFor(() => expect(screen.getByText("prior")).toBeInTheDocument());
 
     fireEvent.click(screen.getByRole("button", { name: "Show History & Collections" }));
+    fireEvent.click(screen.getByRole("button", { name: /^History/ }));
     expect(await screen.findByRole("button", { name: "Load POST /path" })).toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "Load POST /path" }));
 
@@ -146,6 +148,7 @@ describe("request workspace", () => {
     vi.stubGlobal("fetch", fetchMock);
     render(<App />);
     fireEvent.click(screen.getByRole("button", { name: "Show History & Collections" }));
+    fireEvent.click(screen.getByRole("button", { name: /^History/ }));
 
     expect(await screen.findByRole("alert")).toHaveTextContent("The request could not be completed. Try again later.");
     expect(screen.queryByText(/storage/i)).not.toBeInTheDocument();
@@ -218,6 +221,7 @@ describe("request workspace", () => {
     await waitFor(() => expect(screen.getByRole("button", { name: "Save to collection" })).toHaveFocus());
 
     fireEvent.click(screen.getByRole("button", { name: "Show History & Collections" }));
+    fireEvent.click(screen.getByRole("button", { name: /^Collections/ }));
     expect(await screen.findByRole("button", { name: "Load saved PATCH PATCH /items" })).toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "Load saved PATCH PATCH /items" }));
     expect(screen.getByLabelText("Request URL")).toHaveValue("https://example.test/items");

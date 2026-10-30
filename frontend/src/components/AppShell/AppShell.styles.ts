@@ -4,12 +4,18 @@ export const appShellStyles = {
     minHeight: "100vh",
     bgcolor: "background.default",
   },
+  // Side panel: sits beside the workspace and pushes the content right, so nothing is covered.
   sidebar: {
-    width: 240,
-    flexShrink: 0,
+    flex: "0 0 320px",
+    position: "sticky",
+    top: 0,
+    alignSelf: "flex-start",
+    height: "100vh",
+    overflowY: "auto",
+    p: 2,
+    bgcolor: "background.paper",
     borderRight: 1,
     borderColor: "divider",
-    bgcolor: "background.paper",
   },
   main: {
     flex: 1,

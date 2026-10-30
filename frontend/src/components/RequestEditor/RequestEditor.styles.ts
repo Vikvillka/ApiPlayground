@@ -1,4 +1,4 @@
-import { panelCardStyles } from "../../theme/panelStyles";
+import { panelCardStyles, segmentedTabsSx } from "../../theme/panelStyles";
 
 export const requestEditorStyles = {
   root: panelCardStyles,
@@ -13,11 +13,7 @@ export const requestEditorStyles = {
     flexDirection: "column",
     gap: 2,
   },
-  tabs: {
-    minHeight: 40,
-    borderBottom: 1,
-    borderColor: "divider",
-  },
+  tabs: segmentedTabsSx,
   alert: {
     mt: 0.5,
   },

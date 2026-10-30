@@ -462,7 +462,7 @@ public sealed class TracerEndpointTests
             .Where(endpoint => endpoint.RoutePattern.RawText?.StartsWith("api/tracer/", StringComparison.OrdinalIgnoreCase) == true)
             .ToArray();
 
-        Assert.Equal(5, routes.Length);
+        Assert.Equal(6, routes.Length);
         Assert.All(routes, endpoint => Assert.NotNull(endpoint.Metadata.GetMetadata<ControllerActionDescriptor>()));
 
         var routeMethods = routes.Select(endpoint => (
@@ -470,6 +470,7 @@ public sealed class TracerEndpointTests
             Methods: endpoint.Metadata.GetMetadata<HttpMethodMetadata>()?.HttpMethods.ToArray()))
             .ToHashSet();
         Assert.Contains(("api/tracer/get", new[] { "POST" }), routeMethods, RouteMethodComparer.Instance);
+        Assert.Contains(("api/tracer/export", new[] { "POST" }), routeMethods, RouteMethodComparer.Instance);
         Assert.Contains(("api/tracer/history", new[] { "GET" }), routeMethods, RouteMethodComparer.Instance);
         Assert.Contains(("api/tracer/history/{id:guid}", new[] { "GET" }), routeMethods, RouteMethodComparer.Instance);
         Assert.Contains(("api/tracer/collections", new[] { "GET" }), routeMethods, RouteMethodComparer.Instance);
@@ -908,6 +909,51 @@ public sealed class TracerEndpointTests
             Assert.Equal("Blocked by security policy. Request not sent.", payload.Error);
             Assert.Null(payload.StatusCode);
         }
+    }
+
+    [Fact]
+    public async Task Export_returns_request_and_response_as_a_json_attachment()
+    {
+        var outbound = new OutboundResult(OutboundFailure.None, 200, TimeSpan.FromMilliseconds(5),
+            new Dictionary<string, IReadOnlyList<string>> { ["X-Test"] = ["value"] },
+            Encoding.UTF8.GetBytes("exported"), DispatchStarted: true);
+        await using var factory = CreateFactory(new FixedResultExecutor(outbound));
+        using var request = CreateAllowedRequest("https://example.test/", null, "/api/tracer/export");
+        request.Content = JsonContent.Create(new { url = "https://example.test/", method = "POST", body = "{\"a\":1}" });
+
+        using var response = await factory.CreateClient().SendAsync(request);
+        using var document = JsonDocument.Parse(await response.Content.ReadAsStringAsync());
+        var root = document.RootElement;
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        Assert.Equal("attachment", response.Content.Headers.ContentDisposition?.DispositionType);
+        Assert.Equal("apiplayground-export.json", response.Content.Headers.ContentDisposition?.FileName);
+        Assert.Equal("apiplayground.export.v1", root.GetProperty("format").GetString());
+        var exportedRequest = root.GetProperty("request");
+        Assert.Equal("https://example.test/", exportedRequest.GetProperty("url").GetString());
+        Assert.Equal("POST", exportedRequest.GetProperty("method").GetString());
+        Assert.Equal("{\"a\":1}", exportedRequest.GetProperty("body").GetString());
+        var exportedResponse = root.GetProperty("response");
+        Assert.Equal("None", exportedResponse.GetProperty("failure").GetString());
+        Assert.Equal(200, exportedResponse.GetProperty("statusCode").GetInt32());
+        Assert.Equal("exported", exportedResponse.GetProperty("body").GetString());
+        Assert.True(exportedResponse.GetProperty("requestSent").GetBoolean());
+    }
+
+    [Fact]
+    public async Task Export_rejects_invalid_input_with_the_existing_problem_format_without_dispatch()
+    {
+        var executor = new RecordingExecutor();
+        await using var factory = CreateFactory(executor);
+        using var request = CreateAllowedRequest("not-a-url", null, "/api/tracer/export");
+
+        using var response = await factory.CreateClient().SendAsync(request);
+        var payload = await response.Content.ReadFromJsonAsync<ProblemResponse>();
+
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+        Assert.Equal("application/problem+json", response.Content.Headers.ContentType?.MediaType);
+        Assert.Equal("Enter a valid absolute HTTP or HTTPS URL without credentials or fragments.", payload?.Detail);
+        Assert.Equal(0, executor.Calls);
     }
 
     private static WebApplicationFactory<Program> CreateFactory(IOutboundRequestExecutor executor) =>

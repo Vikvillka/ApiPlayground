@@ -13,7 +13,12 @@ namespace ApiPlayground.Api;
 public sealed class TracerRequestController(GetTracerUseCase useCase, IOptions<HttpJsonOptions> jsonOptions) : ApiControllerBase
 {
     [HttpPost("get")]
-    public async Task<IActionResult> Get(CancellationToken cancellationToken)
+    public Task<IActionResult> Get(CancellationToken cancellationToken) => ExecuteAsync(cancellationToken, export: false);
+
+    [HttpPost("export")]
+    public Task<IActionResult> Export(CancellationToken cancellationToken) => ExecuteAsync(cancellationToken, export: true);
+
+    private async Task<IActionResult> ExecuteAsync(CancellationToken cancellationToken, bool export)
     {
         TracerRequest? request;
         try
@@ -45,12 +50,34 @@ public sealed class TracerRequestController(GetTracerUseCase useCase, IOptions<H
         }
 
         var outbound = result.Outbound;
+        if (export)
+        {
+            return ToExportResponse(request, ToPayload(result));
+        }
+
         if (!outbound.Succeeded && outbound.Failure != OutboundFailure.PolicyRejected)
         {
             return new JsonResult(ToPayload(result)) { StatusCode = FailureStatusCode(outbound.Failure) };
         }
 
         return new JsonResult(ToPayload(result)) { StatusCode = SuccessStatusCode(outbound.Failure) };
+    }
+
+    private IActionResult ToExportResponse(TracerRequest request, object response)
+    {
+        Response.Headers.ContentDisposition = "attachment; filename=\"apiplayground-export.json\"";
+        return new JsonResult(new
+        {
+            format = "apiplayground.export.v1",
+            request = new
+            {
+                url = request.Url,
+                method = request.Method,
+                headers = request.Headers ?? new Dictionary<string, string>(),
+                body = request.Body,
+            },
+            response,
+        }) { StatusCode = StatusCodes.Status200OK };
     }
 
     private static string? Validate(TracerRequest request, out Uri? uri)

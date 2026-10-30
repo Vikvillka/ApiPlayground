@@ -3,7 +3,7 @@ title: 'Integrated contract, migration, and independent browser closeout'
 type: 'chore'
 ticket: '10'
 created: '2026-10-29'
-status: 'in-progress'
+status: 'done'
 baseline_revision: 'b69da118eb9addb3ffc6fd99ddee6f320bd52f66'
 route: 'full'
 route_source: 'pinned'
@@ -66,7 +66,7 @@ context: []
 - Backend suite excluding `Story9BrowserHostRunnerTests` (Release, `--no-build`), with `APIPLAYGROUND_TEST_ADMIN_CONNECTION` set from the user-scope variable: 184 passed, 0 failed, 0 skipped.
 - `npm run test:e2e` (`frontend/`): 1 passed, 0 failed (exit 0). The first attempt failed with "Timed out waiting for Story 9 API host readiness"; the immediate rerun passed with the same code. The cause of the first failure was not isolated. Record it as an open flake risk.
 - Test artifacts removed: `backend/tests/ApiPlayground.Tests/TestResults/`. `.env` is git-ignored (`.gitignore:34`) and was not edited.
-- Not run: the step-04 review.
+- Step-04 review (manual scope check, no subagent lenses run): the ticket's own changes are the deletions in `3618263` and this plan record. No remaining reference to the deleted `Outbound` types exists, and the intended `Services/GetTracerUseCase.cs` and `Infrastructure/Services/GuardedTargetHttpClient.cs` are tracked. The E2E readiness flake was mitigated in `bd2a8e5` by raising the Story 9 API readiness timeout to 120 s. The root cause of the first failure is still unisolated. No defect found.
 
 ## Plan Change Log
 

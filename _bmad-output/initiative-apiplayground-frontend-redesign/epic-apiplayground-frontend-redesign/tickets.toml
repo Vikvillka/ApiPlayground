@@ -1,0 +1,80 @@
+# Frontend stories in build order.
+next_id = 8
+
+[[entry]]
+id = 1
+type = "story"
+title = "Foundation: dependencies, theme, shell, and request layer"
+description = "Add Material UI, emotion, MobX, and icon packages; create the theme, the store and theme providers, and an empty layout; add a single request layer and a tracer API module alongside tracer.ts that keep the same endpoints, methods, and headers; tracer.ts is removed in story 5."
+verify = "Type check, unit tests, and build pass; existing App tests pass unchanged; a unit test asserts the request layer sends the same URL, method, and headers as before."
+covers = ["R1", "R2", "R3", "R4"]
+after = []
+hitl = false
+risk = "medium"
+
+[[entry]]
+id = 2
+type = "story"
+title = "Pure helpers and MobX stores"
+description = "Move URL, validation, and code-snippet logic into pure tested helpers; hold request editor, tracer, history, collections, and save-request state in MobX stores composed by one root store."
+verify = "Helper unit tests cover the current URL, validation, and snippet rules; store tests cover the same state transitions the App tests exercise; existing App tests still pass."
+covers = ["R2", "R6"]
+after = [1]
+hitl = false
+risk = "medium"
+
+[[entry]]
+id = 3
+type = "story"
+title = "Request editor and send path in the new design"
+description = "Build the sidebar, top bar, and request editor components (URL, native method select, parameters, headers, body, send) on the stores and request layer, so one request is sent and its status shown through the new layers."
+verify = "A component test sends a request through the store and request layer; existing App tests for the send path and the method select pass."
+covers = ["R2", "R3", "R4", "R5"]
+after = [1, 2]
+hitl = false
+risk = "medium"
+
+[[entry]]
+id = 4
+type = "story"
+title = "Response panel"
+description = "Build the response summary, body, and headers tabs as separate components with their own styles, using the reference screenshot's layout and the current tab keyboard behavior. The code snippet tab is not part of this story; it moved to epic-apiplayground-request-export (decision, owner, 2026-10-29)."
+verify = "Existing App tests for status text, tabs, and arrow-key navigation pass; the response panel matches the approved screenshot layout."
+covers = ["R3", "R4", "R5"]
+after = [3]
+hitl = false
+risk = "medium"
+unknown = "Path to the reference screenshot is needed before this story starts."
+
+[[entry]]
+id = 5
+type = "story"
+title = "History drawer, collections, save dialog, and migration close-out"
+description = "Build the persistent history and collections drawer and the save-request dialog as components with focus trapping, then delete App.css and tracer.ts once nothing imports them."
+verify = "Existing App tests for history, collections, dialog focus trap, Escape focus return, and drawer state pass; App.css and tracer.ts are removed and no file imports them."
+covers = ["R3", "R4", "R5"]
+after = [4]
+hitl = false
+risk = "medium"
+
+[[entry]]
+id = 6
+type = "story"
+title = "Refactor sweep"
+description = "Apply cleanup only: remove duplicated markup and style, tighten component props, and remove unused code surfaced by the build; no contract or behavior change."
+verify = "Type check, unit tests, and build pass with no test expectation changed."
+covers = ["R3", "R6"]
+after = [1, 2, 3, 4, 5]
+hitl = false
+risk = "low"
+
+[[entry]]
+id = 7
+type = "story"
+title = "Integrated verification: end-to-end suite and visual check"
+description = "Run the Story 9 end-to-end suite and check the redesigned UI in the browser against the reference screenshot; record any defect as a blocker rather than fixing it silently."
+verify = "npm run test:e2e passes with APIPLAYGROUND_TEST_ADMIN_CONNECTION loaded from User scope; the browser check against the reference screenshot is recorded in the story notes."
+covers = ["R4", "R5"]
+after = [6]
+hitl = true
+risk = "medium"

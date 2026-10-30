@@ -1,0 +1,69 @@
+# Request export stories in build order.
+# Stories start after the redesigned component structure and the request and response panels from epic-apiplayground-frontend-redesign are in place.
+next_id = 7
+
+[[entry]]
+id = 1
+type = "story"
+title = "Code snippet builder for curl and JavaScript fetch"
+description = "Add a pure helper that builds a curl command and a JavaScript fetch call from the current request editor state, covering method, URL with query parameters, headers, and body; escape values for the shell and for JavaScript string literals."
+verify = "Helper unit tests cover GET with query parameters, POST with a JSON body, custom headers, and quoting of single quotes and newlines for both languages; no DOM or network use."
+covers = ["N1"]
+after = []
+hitl = false
+risk = "low"
+
+[[entry]]
+id = 2
+type = "story"
+title = "Code tab in the response area"
+description = "Add a Code tab to the response tabs that shows the snippet for the current request, with a switch between curl and JavaScript fetch; the tab reads the request state from the stores and builds nothing in the component."
+verify = "Component test shows the snippet for the current request and switches language; existing response tab tests for arrow-key navigation and aria-controls still pass."
+covers = ["N1"]
+after = [1]
+hitl = false
+risk = "medium"
+
+[[entry]]
+id = 3
+type = "story"
+title = "Copy snippet to the clipboard"
+description = "Add a Copy control to the Code tab that writes the visible snippet to the clipboard, and shows a short confirmation on success or an error message when the clipboard is unavailable."
+verify = "Component test asserts the clipboard receives the visible snippet for each language; a rejected clipboard write shows the error message and does not throw."
+covers = ["N2"]
+after = [2]
+hitl = false
+risk = "low"
+
+[[entry]]
+id = 4
+type = "story"
+title = "Backend JSON export endpoint"
+description = "Add one tracer endpoint that accepts the current request and its response and returns them as a JSON document; the endpoint path and body shape are decided during inception before coding. No other backend changes, and existing endpoints stay as they are."
+verify = "Backend tests cover a successful export with the expected JSON shape, rejection of invalid input with the existing error format, and that the existing tracer endpoints are unchanged."
+covers = ["N3"]
+after = []
+hitl = false
+risk = "medium"
+
+[[entry]]
+id = 5
+type = "story"
+title = "Frontend JSON export through the request layer"
+description = "Add an Export JSON action that sends the current request and response to the new endpoint through the single request layer and saves the returned JSON as a file in the browser; the export logic lives in its own component folder."
+verify = "Unit test asserts the request layer sends the expected URL, method, and headers; component test asserts the download is triggered with a JSON file name; the failure message is shown when the server returns an error."
+covers = ["N3"]
+after = [4]
+hitl = false
+risk = "medium"
+
+[[entry]]
+id = 6
+type = "story"
+title = "Integrated check of snippet, copy, and export"
+description = "Extend the end-to-end suite with the Code tab, Copy, and Export JSON flows, and check the new controls in the browser against the reference screenshot; record any defect as a blocker rather than fixing it silently."
+verify = "npm run test:e2e passes with APIPLAYGROUND_TEST_ADMIN_CONNECTION loaded from User scope; the browser check of the Code tab and export controls is recorded in the story notes."
+covers = ["N1", "N2", "N3"]
+after = [3, 5]
+hitl = true
+risk = "medium"

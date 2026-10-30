@@ -1,0 +1,15 @@
+# Initiative epics in build order.
+
+[[epic]]
+id = 1
+slug = "epic-apiplayground-frontend-redesign"
+title = "Frontend component architecture, state, and redesign"
+covers = ["R1", "R2", "R3", "R4", "R5", "R6"]
+after = []
+
+[[epic]]
+id = 2
+slug = "epic-apiplayground-request-export"
+title = "Code snippet, copy, and JSON export for requests"
+covers = ["N1", "N2", "N3"]
+after = [{ epic = 1, needs = "redesigned component structure and the request and response panels" }]

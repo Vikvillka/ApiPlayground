@@ -37,7 +37,7 @@ headless: false
 
 ## Behavior verification
 
-- Recorded verification: full Release backend suite 111/111, Story 9 browser E2E 1/1, frontend 27/27 and production build passed. The final focused Story 9 plus outbound-safety filter passed 56/56 after consolidating DNS coverage to one answer-change/pinned-connector regression; the Story 9 closeout had previously passed 10/10 with that regression. All dispatched automated traffic remains test-owned loopback; the synthetic DNS regression's connector is deliberately stopped before any connection.
+- Recorded verification: full Release backend suite 111/111, Story 9 browser E2E 1/1, frontend 75/75 and production build passed. The final focused Story 9 plus outbound-safety filter passed 56/56 after consolidating DNS coverage to one answer-change/pinned-connector regression; the Story 9 closeout had previously passed 10/10 with that regression. All dispatched automated traffic remains test-owned loopback; the synthetic DNS regression's connector is deliberately stopped before any connection.
 - Local topology check during this retrospective: PostgreSQL 17 reported ready; the API health endpoint responded; Vite served HTTP 200 on 127.0.0.1. This used the current checkout, not a freshly cloned checkout.
 
 ## Previous-retro follow-through
@@ -46,8 +46,8 @@ No previous retrospective file exists for this epic or earlier epic in the initi
 
 ## Action items
 
-- **Proposed, deferred; owner: project owner — record the Story 1 clean-checkout journey if that extra evidence is desired.** The plan's manual check has no completion record. The current-checkout health/UI check and disposable-database migration tests are evidence, but do not substitute for a fresh-clone journey. This is not a declared Done-when criterion. Source: [Story 1 manual checks](story-local-platform-baseline-plan.md#verification).
-- **Proposed, deferred; owner: project owner — repair Story 1.4's baseline reference after confirming the intended commit.** The recorded object does not resolve, so the Story 1.4 plan's diff range was not inferred and its retrospective diff review was narrowed. Source: Story 1.4 plan `baseline_revision` and Git object lookup recorded above.
+- **Closed; owner: project owner — Story 1 is complete; the clean-checkout journey is not required as extra evidence.** The plan's manual check has no completion record. The current-checkout health/UI check and disposable-database migration tests are evidence, but do not substitute for a fresh-clone journey. This is not a declared Done-when criterion. Source: [Story 1 manual checks](story-local-platform-baseline-plan.md#verification).
+- **Dropped; owner: project owner — Story 1.4's baseline reference is not pursued.** The recorded object does not resolve, so the Story 1.4 plan's diff range was not inferred and its retrospective diff review was narrowed. Source: Story 1.4 plan `baseline_revision` and Git object lookup recorded above.
 
 ## Acceptance verdict
 
@@ -55,8 +55,8 @@ No previous retrospective file exists for this epic or earlier epic in the initi
 
 ## Open questions
 
-- Story 1's literal clean-checkout manual journey remains unverified; it is deferred, not a declared acceptance criterion.
-- Story 1.4's baseline Git object remains unavailable; do not infer its diff range until the intended commit is confirmed.
+- Story 1 is complete per the owner; its literal clean-checkout journey was not reproduced and is not a declared acceptance criterion.
+- Story 1.4's baseline Git object remains unavailable; the owner dropped this follow-up, so its diff range is not inferred.
 - The target developer-scenario/usability question remains genuinely open for future discovery; it is outside the declared MVP Done when.
 
 ## Assumptions

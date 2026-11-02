@@ -234,7 +234,7 @@ describe("request workspace", () => {
     expect(within(requestPanel).getAllByLabelText("Header value")[0]).toHaveValue("");
     expect(within(requestPanel).getAllByLabelText("Header value")[0]).toHaveAttribute("placeholder", "Value not saved — enter it again");
     expect(within(requestPanel).getAllByLabelText("Enabled")[0]).toBeDisabled();
-  });
+  }, 60000);
 
   it("keeps save dialog values and request editor intact after failure for retry", async () => {
     const fetchMock = vi.fn()

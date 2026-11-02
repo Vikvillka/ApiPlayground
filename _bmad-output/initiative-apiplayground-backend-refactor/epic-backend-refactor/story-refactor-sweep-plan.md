@@ -2,6 +2,7 @@
 title: "Refactor sweep"
 ticket: 5
 status: done
+baseline_revision: '6fa47a0de96d0f4b51bbc9683ef9ab3a584498b6'
 ---
 
 # Plan: Refactor sweep (ticket 1.5)

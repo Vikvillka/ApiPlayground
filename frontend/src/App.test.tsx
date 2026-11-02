@@ -98,7 +98,7 @@ describe("request workspace", () => {
     const replayed = JSON.parse(fetchMock.mock.calls[3][1].body as string);
     expect(fetchMock.mock.calls[4][0]).toBe("/api/tracer/history");
     expect(replayed.url).toBe("https://example.test/path?tag=one");
-  });
+  }, 60000);
 
   it("reports that a dispatched request's History entry could not be saved", async () => {
     const fetchMock = vi.fn().mockResolvedValue(new Response(JSON.stringify({

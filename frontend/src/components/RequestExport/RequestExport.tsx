@@ -8,7 +8,10 @@ import { useRootStore } from "../../stores/StoreContext";
 
 export const exportFileName = "apiplayground-export.json";
 
-// Saves text as a file through a temporary object URL. The link is removed and the URL released right after the click.
+// Saves text as a file through a temporary object URL. The link is removed right after the click.
+// The URL is kept alive for a while: revoking it immediately makes Chromium cancel the download.
+const objectUrlReleaseDelayMs = 10_000;
+
 export function downloadJson(fileName: string, text: string): void {
   const url = URL.createObjectURL(new Blob([text], { type: "application/json" }));
   const link = document.createElement("a");
@@ -17,7 +20,7 @@ export function downloadJson(fileName: string, text: string): void {
   document.body.appendChild(link);
   link.click();
   link.remove();
-  setTimeout(() => URL.revokeObjectURL(url), 0);
+  setTimeout(() => URL.revokeObjectURL(url), objectUrlReleaseDelayMs);
 }
 
 // Exports the response already received as a JSON document from the backend and saves it as a file.

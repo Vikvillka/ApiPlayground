@@ -117,9 +117,10 @@ try {
       catch { if (vite.exitCode !== null) await waitExit(vite); return false; }
     }, "Vite readiness");
 
-    const spec = path.join(frontendRoot, "e2e", "story9-mvp.spec.ts");
+    // One worker: the Story 9 journey restarts the shared API host, which must not overlap other specs.
+    const specs = ["story9-mvp.spec.ts", "uj1-two-users.spec.ts"];
     const playwrightConfig = path.join(runnerDirectory, "playwright.config.ts");
-    await fs.writeFile(playwrightConfig, `export default { testDir: ${JSON.stringify(path.dirname(spec))}, testMatch: ${JSON.stringify(path.basename(spec))}, use: { baseURL: 'http://127.0.0.1:5173', browserName: 'chromium', headless: true } };\n`);
+    await fs.writeFile(playwrightConfig, `export default { testDir: ${JSON.stringify(path.join(frontendRoot, "e2e"))}, testMatch: ${JSON.stringify(specs)}, workers: 1, use: { baseURL: 'http://127.0.0.1:5173', browserName: 'chromium', headless: true } };\n`);
     const testProcess = start(process.execPath, [path.join(frontendRoot, "node_modules", "@playwright", "test", "cli.js"), "test", "--config", playwrightConfig], frontendRoot, {
       APG_STORY9_TARGET_URL: ready.targetUrl,
       APG_STORY9_RUNNER_DIR: runnerDirectory,

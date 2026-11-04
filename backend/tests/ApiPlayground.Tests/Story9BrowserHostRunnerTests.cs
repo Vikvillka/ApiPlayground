@@ -89,12 +89,24 @@ internal sealed class Story9BrowserApiHost(string appConnectionString, Uri targe
         builder.Configuration["ConnectionStrings:Postgres"] = appConnectionString;
         builder.Services.AddInfrastructure(builder.Configuration);
         builder.Services.AddGuardedOutbound(OutboundPolicy.ForTestOnlyLoopbackEndpoint(targetAddress));
+        // UnhandledExceptionHandler is internal to the Api assembly; the browser journey uses the default ProblemDetails path.
+        builder.Services.AddProblemDetails();
+        // Mirrors Program.cs: default-deny, so the browser journey must sign in first.
+        builder.Services.AddAuthorization(options =>
+            options.FallbackPolicy = new Microsoft.AspNetCore.Authorization.AuthorizationPolicyBuilder().RequireAuthenticatedUser().Build());
         builder.Services.AddControllers();
         builder.Services.AddScoped<GetTracerUseCase>();
         builder.Services.AddScoped<RequestHistoryUseCase>();
         builder.Services.AddScoped<SaveRequestUseCase>();
+        builder.Services.AddScoped<ApiPlayground.Application.Auth.RegisterAccountUseCase>();
+        builder.Services.AddScoped<ApiPlayground.Application.Auth.SignInUseCase>();
+        builder.Services.AddScoped<ApiPlayground.Application.Auth.SignOutUseCase>();
+        builder.Services.AddScoped<ApiPlayground.Application.Auth.CurrentUserUseCase>();
         var app = builder.Build();
+        app.UseExceptionHandler();
         app.UseRequestGuard();
+        app.UseAuthentication();
+        app.UseAuthorization();
         app.MapTracerEndpoints();
         app.MapControllers();
 

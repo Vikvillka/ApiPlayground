@@ -1,4 +1,5 @@
 import { expect, test } from "@playwright/test";
+import { registerAndSignIn } from "./auth-helpers";
 
 test("local MVP dispatch, History replay, policy rejection, and Collection reuse across API restart", async ({ page }) => {
   const targetUrl = process.env.APG_STORY9_TARGET_URL;
@@ -10,6 +11,7 @@ test("local MVP dispatch, History replay, policy rejection, and Collection reuse
   const readHits = async () => Number((await fs.readFile(hitsPath, "utf8")).trim());
 
   await page.goto("/");
+  await registerAndSignIn(page, "story9@example.test");
   await page.getByLabel("Request URL").fill(targetUrl);
   await page.getByLabel("Request method").selectOption("POST");
   await page.getByRole("tab", { name: "Headers" }).click();

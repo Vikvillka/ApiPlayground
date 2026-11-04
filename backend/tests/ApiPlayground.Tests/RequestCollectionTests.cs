@@ -8,12 +8,14 @@ namespace ApiPlayground.Tests;
 
 public sealed class RequestCollectionTests
 {
+    private static readonly Guid Owner = Guid.Parse("00000000-0000-0000-0000-0000000000a1");
+
     [Fact]
     public async Task Save_redacts_sensitive_headers_and_preserves_other_request_fields()
     {
         var store = new InMemoryCollectionRepository();
         var useCase = new SaveRequestUseCase(store);
-        var saved = await useCase.SaveAsync(new SaveRequestCommand(null, "Reusable", "PATCH /resource", "PATCH",
+        var saved = await useCase.SaveAsync(Owner, new SaveRequestCommand(null, "Reusable", "PATCH /resource", "PATCH",
             "https://example.test/resource?tag=one&access_token=private&mode=full", new Dictionary<string, string>
             {
                 ["Authorization"] = "private",
@@ -46,7 +48,7 @@ public sealed class RequestCollectionTests
         var useCase = new SaveRequestUseCase(new InMemoryCollectionRepository());
         var command = new SaveRequestCommand(null, "Reusable", "GET /", "GET", "https://example.test/", headers, null);
 
-        var saved = await useCase.SaveAsync(command);
+        var saved = await useCase.SaveAsync(Owner, command);
         var history = RequestHistoryRedaction.Create(
             new OutboundRequest(new Uri(command.Url), command.Method, headers),
             new OutboundResult(OutboundFailure.None, 200, TimeSpan.Zero,
@@ -67,10 +69,10 @@ public sealed class RequestCollectionTests
         var valid = new SaveRequestCommand(null, "Requests", "GET /", "GET", "https://example.test/",
             new Dictionary<string, string>(), null);
 
-        await Assert.ThrowsAsync<ArgumentException>(() => useCase.SaveAsync(valid with { CollectionId = Guid.NewGuid() }));
-        await Assert.ThrowsAsync<ArgumentException>(() => useCase.SaveAsync(valid with { Url = "file:///private" }));
-        await Assert.ThrowsAsync<ArgumentException>(() => useCase.SaveAsync(valid with { Method = "TRACE" }));
-        await Assert.ThrowsAsync<ArgumentException>(() => useCase.SaveAsync(valid with { Body = "{invalid" }));
+        await Assert.ThrowsAsync<ArgumentException>(() => useCase.SaveAsync(Owner, valid with { CollectionId = Guid.NewGuid() }));
+        await Assert.ThrowsAsync<ArgumentException>(() => useCase.SaveAsync(Owner, valid with { Url = "file:///private" }));
+        await Assert.ThrowsAsync<ArgumentException>(() => useCase.SaveAsync(Owner, valid with { Method = "TRACE" }));
+        await Assert.ThrowsAsync<ArgumentException>(() => useCase.SaveAsync(Owner, valid with { Body = "{invalid" }));
         Assert.Empty(store.Collections);
     }
 
@@ -84,7 +86,7 @@ public sealed class RequestCollectionTests
         var command = new SaveRequestCommand(null, "Requests", "request", method, "https://example.test/",
             new Dictionary<string, string>(), null);
 
-        var error = await Assert.ThrowsAsync<ArgumentException>(() => useCase.SaveAsync(command));
+        var error = await Assert.ThrowsAsync<ArgumentException>(() => useCase.SaveAsync(Owner, command));
 
         Assert.Equal("Choose a supported HTTP method.", error.Message);
         Assert.Empty(store.Collections);
@@ -102,7 +104,7 @@ public sealed class RequestCollectionTests
         var command = new SaveRequestCommand(null, "Requests", "request", "GET", url,
             new Dictionary<string, string>(), null);
 
-        var error = await Assert.ThrowsAsync<ArgumentException>(() => useCase.SaveAsync(command));
+        var error = await Assert.ThrowsAsync<ArgumentException>(() => useCase.SaveAsync(Owner, command));
 
         Assert.Equal("Enter a valid absolute HTTP or HTTPS URL within the 2048 character limit.", error.Message);
         Assert.Empty(store.Collections);
@@ -121,7 +123,7 @@ public sealed class RequestCollectionTests
         var command = new SaveRequestCommand(null, "Requests", "request", method, "https://example.test/",
             new Dictionary<string, string>(), null);
 
-        var saved = await useCase.SaveAsync(command);
+        var saved = await useCase.SaveAsync(Owner, command);
 
         Assert.Equal(method, saved.Method);
         Assert.Single(store.Collections);
@@ -135,17 +137,17 @@ public sealed class RequestCollectionTests
         var valid = new SaveRequestCommand(null, "Requests", "POST /", "POST", "https://example.test/",
             new Dictionary<string, string>(), "   ");
 
-        var saved = await useCase.SaveAsync(valid);
+        var saved = await useCase.SaveAsync(Owner, valid);
 
         Assert.Null(saved.Body);
         var blankHeader = valid with { Headers = new Dictionary<string, string> { [" "] = "value" } };
-        await Assert.ThrowsAsync<ArgumentException>(() => useCase.SaveAsync(blankHeader));
+        await Assert.ThrowsAsync<ArgumentException>(() => useCase.SaveAsync(Owner, blankHeader));
         var duplicateHeaders = new Dictionary<string, string> { ["X-Example"] = "one", ["x-example"] = "two" };
         var duplicateError = await Assert.ThrowsAsync<ArgumentException>(() =>
-            useCase.SaveAsync(valid with { Headers = duplicateHeaders }));
+            useCase.SaveAsync(Owner, valid with { Headers = duplicateHeaders }));
         Assert.Equal("Enabled request header names must be unique and non-empty.", duplicateError.Message);
         var getWhitespaceBodyError = await Assert.ThrowsAsync<ArgumentException>(() =>
-            useCase.SaveAsync(valid with { Method = "GET" }));
+            useCase.SaveAsync(Owner, valid with { Method = "GET" }));
         Assert.Equal("JSON bodies are only supported for POST, PUT, and PATCH.", getWhitespaceBodyError.Message);
         Assert.Single(store.Collections);
         Assert.Single(Assert.Single(store.Collections).Requests);
@@ -159,7 +161,7 @@ public sealed class RequestCollectionTests
         var command = new SaveRequestCommand(null, "Requests", "GET /", "trace", "not-a-url",
             new Dictionary<string, string>(), null);
 
-        var error = await Assert.ThrowsAsync<ArgumentException>(() => useCase.SaveAsync(command));
+        var error = await Assert.ThrowsAsync<ArgumentException>(() => useCase.SaveAsync(Owner, command));
 
         Assert.Equal("Choose a supported HTTP method.", error.Message);
         Assert.Empty(store.Collections);
@@ -177,8 +179,10 @@ public sealed class RequestCollectionTests
             await using (var setup = new PlatformDbContext(options))
                 await setup.Database.MigrateAsync();
 
+            var owner = Guid.NewGuid();
+            await TestUsers.InsertAsync(connectionString, owner);
             var useCase = new SaveRequestUseCase(new PostgresRequestCollectionRepository(new PlatformDbContext(options)));
-            var saved = await useCase.SaveAsync(new SaveRequestCommand(null, "Persisted", "GET /items", "GET",
+            var saved = await useCase.SaveAsync(owner, new SaveRequestCommand(null, "Persisted", "GET /items", "GET",
                 "https://example.test/items?mode=full&password=private", new Dictionary<string, string>
                 {
                     ["Cookie"] = "private-cookie",
@@ -187,7 +191,7 @@ public sealed class RequestCollectionTests
 
             await using (var freshContext = new PlatformDbContext(options))
             {
-                var reloaded = Assert.Single(await new PostgresRequestCollectionRepository(freshContext).ListAsync());
+                var reloaded = Assert.Single(await new PostgresRequestCollectionRepository(freshContext).ListAsync(owner));
                 var request = Assert.Single(reloaded.Requests);
                 Assert.Equal("Persisted", reloaded.Name);
                 Assert.Equal(saved.Id, request.Id);
@@ -203,11 +207,11 @@ public sealed class RequestCollectionTests
                 var store = new PostgresRequestCollectionRepository(freshContext);
                 var invalidRow = new SavedRequestSnapshot(Guid.NewGuid(), DateTimeOffset.UtcNow, Guid.Empty, string.Empty,
                     new string('x', 121), "GET", "https://example.test/", new Dictionary<string, string>(), [], null);
-                await Assert.ThrowsAsync<DbUpdateException>(() => store.SaveAsync(invalidRow, null, "Must roll back"));
+                await Assert.ThrowsAsync<DbUpdateException>(() => store.SaveAsync(owner, invalidRow, null, "Must roll back"));
             }
 
             await using var verificationContext = new PlatformDbContext(options);
-            var collections = await new PostgresRequestCollectionRepository(verificationContext).ListAsync();
+            var collections = await new PostgresRequestCollectionRepository(verificationContext).ListAsync(owner);
             Assert.Single(collections);
             Assert.DoesNotContain(collections, item => item.Name == "Must roll back");
         });
@@ -217,10 +221,10 @@ public sealed class RequestCollectionTests
     {
         public List<RequestCollectionSnapshot> Collections { get; } = [];
 
-        public Task<IReadOnlyList<RequestCollectionSnapshot>> ListAsync(CancellationToken cancellationToken = default) =>
+        public Task<IReadOnlyList<RequestCollectionSnapshot>> ListAsync(Guid ownerId, CancellationToken cancellationToken = default) =>
             Task.FromResult<IReadOnlyList<RequestCollectionSnapshot>>(Collections.ToArray());
 
-        public Task<SavedRequestSnapshot> SaveAsync(SavedRequestSnapshot request, Guid? collectionId, string? newCollectionName,
+        public Task<SavedRequestSnapshot> SaveAsync(Guid ownerId, SavedRequestSnapshot request, Guid? collectionId, string? newCollectionName,
             CancellationToken cancellationToken = default)
         {
             var collection = collectionId is null

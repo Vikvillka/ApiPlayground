@@ -1,4 +1,5 @@
 using System.Text.Json;
+using ApiPlayground.Application.Auth;
 using ApiPlayground.Application.Outbound;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Logging;
@@ -11,16 +12,22 @@ namespace ApiPlayground.Api;
 [TracerRequestGuardMetadata]
 public sealed class TracerCollectionsController(
     SaveRequestUseCase useCase,
+    ICurrentUser currentUser,
     IOptions<HttpJsonOptions> jsonOptions,
     ILogger<TracerCollectionsController> logger) : ApiControllerBase
 {
     [HttpGet]
     public async Task<IActionResult> List(CancellationToken cancellationToken)
     {
+        if (currentUser.UserId is not { } ownerId)
+        {
+            return UnauthorizedProblem("Authentication is required.");
+        }
+
         IReadOnlyList<RequestCollectionSnapshot> collections;
         try
         {
-            collections = await useCase.ListAsync(cancellationToken);
+            collections = await useCase.ListAsync(ownerId, cancellationToken);
         }
         catch (Exception exception)
         {
@@ -37,6 +44,11 @@ public sealed class TracerCollectionsController(
     [HttpPost("requests")]
     public async Task<IActionResult> Save(CancellationToken cancellationToken)
     {
+        if (currentUser.UserId is not { } ownerId)
+        {
+            return UnauthorizedProblem("Authentication is required.");
+        }
+
         SaveCollectionRequest? request;
         try
         {
@@ -56,7 +68,7 @@ public sealed class TracerCollectionsController(
 
         try
         {
-            var saved = await useCase.SaveAsync(new SaveRequestCommand(
+            var saved = await useCase.SaveAsync(ownerId, new SaveRequestCommand(
                 request.CollectionId,
                 request.NewCollectionName,
                 request.Title,

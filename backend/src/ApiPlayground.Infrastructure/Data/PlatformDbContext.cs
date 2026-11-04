@@ -38,6 +38,8 @@ public sealed class PlatformDbContext(DbContextOptions<PlatformDbContext> option
 		history.Property(item => item.Failure).HasColumnName("failure").HasMaxLength(40).IsRequired();
 		history.Property(item => item.StatusCode).HasColumnName("status_code");
 		history.Property(item => item.ElapsedMilliseconds).HasColumnName("elapsed_ms").IsRequired();
+		history.Property(item => item.OwnerId).HasColumnName("owner_id").IsRequired();
+		history.HasOne<IdentityUser<Guid>>().WithMany().HasForeignKey(item => item.OwnerId).OnDelete(DeleteBehavior.Cascade);
 		history.HasIndex(item => new { item.CreatedAt, item.Id });
 
 		var collection = modelBuilder.Entity<RequestCollectionEntity>();
@@ -45,7 +47,9 @@ public sealed class PlatformDbContext(DbContextOptions<PlatformDbContext> option
 		collection.HasKey(item => item.Id);
 		collection.Property(item => item.Id).HasColumnName("id");
 		collection.Property(item => item.Name).HasColumnName("name").HasMaxLength(80).IsRequired();
-		collection.HasIndex(item => item.Name).IsUnique();
+		collection.Property(item => item.OwnerId).HasColumnName("owner_id").IsRequired();
+		collection.HasOne<IdentityUser<Guid>>().WithMany().HasForeignKey(item => item.OwnerId).OnDelete(DeleteBehavior.Cascade);
+		collection.HasIndex(item => new { item.OwnerId, item.Name }).IsUnique();
 		collection.HasMany(item => item.Requests).WithOne(item => item.Collection)
 			.HasForeignKey(item => item.CollectionId).OnDelete(DeleteBehavior.Cascade);
 
@@ -63,6 +67,8 @@ public sealed class PlatformDbContext(DbContextOptions<PlatformDbContext> option
 		savedRequest.Property(item => item.RedactedHeaders).HasColumnName("redacted_headers_json")
 			.HasConversion(JsonConverter<List<string>>(), JsonComparer<List<string>>()).IsRequired();
 		savedRequest.Property(item => item.Body).HasColumnName("body");
+		savedRequest.Property(item => item.OwnerId).HasColumnName("owner_id").IsRequired();
+		savedRequest.HasOne<IdentityUser<Guid>>().WithMany().HasForeignKey(item => item.OwnerId).OnDelete(DeleteBehavior.Cascade);
 		savedRequest.HasIndex(item => new { item.CollectionId, item.CreatedAt, item.Id });
 	}
 

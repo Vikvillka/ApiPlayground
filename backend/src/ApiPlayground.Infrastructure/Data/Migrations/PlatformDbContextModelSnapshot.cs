@@ -35,9 +35,13 @@ namespace ApiPlayground.Api.Data.Migrations
                         .HasColumnType("character varying(80)")
                         .HasColumnName("name");
 
+                    b.Property<Guid>("OwnerId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("owner_id");
+
                     b.HasKey("Id");
 
-                    b.HasIndex("Name")
+                    b.HasIndex("OwnerId", "Name")
                         .IsUnique();
 
                     b.ToTable("request_collections", (string)null);
@@ -79,6 +83,10 @@ namespace ApiPlayground.Api.Data.Migrations
                         .HasColumnType("character varying(8)")
                         .HasColumnName("method");
 
+                    b.Property<Guid>("OwnerId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("owner_id");
+
                     b.Property<string>("RedactedHeaders")
                         .IsRequired()
                         .HasColumnType("text")
@@ -100,6 +108,8 @@ namespace ApiPlayground.Api.Data.Migrations
                         .HasColumnName("url");
 
                     b.HasKey("Id");
+
+                    b.HasIndex("OwnerId");
 
                     b.HasIndex("CreatedAt", "Id");
 
@@ -136,6 +146,10 @@ namespace ApiPlayground.Api.Data.Migrations
                         .HasColumnType("character varying(8)")
                         .HasColumnName("method");
 
+                    b.Property<Guid>("OwnerId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("owner_id");
+
                     b.Property<string>("RedactedHeaders")
                         .IsRequired()
                         .HasColumnType("text")
@@ -154,6 +168,8 @@ namespace ApiPlayground.Api.Data.Migrations
                         .HasColumnName("url");
 
                     b.HasKey("Id");
+
+                    b.HasIndex("OwnerId");
 
                     b.HasIndex("CollectionId", "CreatedAt", "Id");
 
@@ -289,11 +305,35 @@ namespace ApiPlayground.Api.Data.Migrations
                     b.ToTable("AspNetUserTokens", (string)null);
                 });
 
+            modelBuilder.Entity("ApiPlayground.Domain.Requests.RequestCollectionEntity", b =>
+                {
+                    b.HasOne("Microsoft.AspNetCore.Identity.IdentityUser<System.Guid>", null)
+                        .WithMany()
+                        .HasForeignKey("OwnerId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("ApiPlayground.Domain.Requests.RequestHistoryEntity", b =>
+                {
+                    b.HasOne("Microsoft.AspNetCore.Identity.IdentityUser<System.Guid>", null)
+                        .WithMany()
+                        .HasForeignKey("OwnerId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+                });
+
             modelBuilder.Entity("ApiPlayground.Domain.Requests.SavedRequestEntity", b =>
                 {
                     b.HasOne("ApiPlayground.Domain.Requests.RequestCollectionEntity", "Collection")
                         .WithMany("Requests")
                         .HasForeignKey("CollectionId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("Microsoft.AspNetCore.Identity.IdentityUser<System.Guid>", null)
+                        .WithMany()
+                        .HasForeignKey("OwnerId")
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
 

@@ -199,6 +199,8 @@ public sealed class Story9CloseoutTests
             .Options;
         await using (var context = new ApiPlayground.Api.Data.PlatformDbContext(options))
             await context.Database.MigrateAsync();
+        var owner = Guid.NewGuid();
+        await TestUsers.InsertAsync(database.AppConnectionString, owner);
 
         await using var historyContext = new ApiPlayground.Api.Data.PlatformDbContext(options);
         var historyStore = new ApiPlayground.Infrastructure.Outbound.PostgresRequestHistoryRepository(historyContext);
@@ -206,10 +208,10 @@ public sealed class Story9CloseoutTests
             new OutboundRequest(new Uri("http://127.0.0.1:49152/persisted"), "GET"),
             new OutboundResult(OutboundFailure.None, 200, TimeSpan.FromMilliseconds(1),
                 new Dictionary<string, IReadOnlyList<string>>(), "ok"u8.ToArray(), DispatchStarted: true));
-        await historyStore.SaveAsync(saved);
+        await historyStore.SaveAsync(owner, saved);
 
         await using var verificationContext = new ApiPlayground.Api.Data.PlatformDbContext(options);
-        var listed = await new ApiPlayground.Infrastructure.Outbound.PostgresRequestHistoryRepository(verificationContext).ListAsync();
+        var listed = await new ApiPlayground.Infrastructure.Outbound.PostgresRequestHistoryRepository(verificationContext).ListAsync(owner);
         Assert.Equal(saved.Id, Assert.Single(listed).Id);
         var appConnection = new NpgsqlConnectionStringBuilder(database.AppConnectionString);
         Assert.Equal(database.DatabaseName, appConnection.Database);
@@ -282,14 +284,14 @@ public sealed class Story9CloseoutTests
     private sealed class RecordingHistoryRepository : IRequestHistoryRepository
     {
         public List<RequestHistorySnapshot> Items { get; } = [];
-        public Task SaveAsync(RequestHistorySnapshot snapshot, CancellationToken cancellationToken = default)
+        public Task SaveAsync(Guid ownerId, RequestHistorySnapshot snapshot, CancellationToken cancellationToken = default)
         {
             Items.Add(snapshot);
             return Task.CompletedTask;
         }
-        public Task<IReadOnlyList<RequestHistorySnapshot>> ListAsync(CancellationToken cancellationToken = default) =>
+        public Task<IReadOnlyList<RequestHistorySnapshot>> ListAsync(Guid ownerId, CancellationToken cancellationToken = default) =>
             Task.FromResult<IReadOnlyList<RequestHistorySnapshot>>(Items.ToArray());
-        public Task<RequestHistorySnapshot?> FindAsync(Guid id, CancellationToken cancellationToken = default) =>
+        public Task<RequestHistorySnapshot?> FindAsync(Guid ownerId, Guid id, CancellationToken cancellationToken = default) =>
             Task.FromResult(Items.SingleOrDefault(item => item.Id == id));
     }
 

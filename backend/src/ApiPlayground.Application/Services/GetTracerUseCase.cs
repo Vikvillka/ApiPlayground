@@ -9,7 +9,7 @@ public sealed class GetTracerUseCase(
     IOutboundRequestExecutor executor,
     IRequestHistoryRepository history)
 {
-    public async Task<GetTracerResult> ExecuteAsync(OutboundRequest request, CancellationToken cancellationToken = default)
+    public async Task<GetTracerResult> ExecuteAsync(Guid ownerId, OutboundRequest request, CancellationToken cancellationToken = default)
     {
         if (request.Uri is null || !request.Uri.IsAbsoluteUri || request.Uri.Scheme is not ("http" or "https"))
         {
@@ -17,7 +17,7 @@ public sealed class GetTracerUseCase(
         }
 
         var outbound = await executor.ExecuteAsync(request, cancellationToken);
-        var historySaved = await TrySaveHistoryAsync(request, outbound);
+        var historySaved = await TrySaveHistoryAsync(ownerId, request, outbound);
 
         if (outbound.Failure == OutboundFailure.PolicyRejected)
         {
@@ -33,7 +33,7 @@ public sealed class GetTracerUseCase(
         return new GetTracerResult(outbound, error, historySaved);
     }
 
-    private async Task<bool> TrySaveHistoryAsync(OutboundRequest request, OutboundResult outbound)
+    private async Task<bool> TrySaveHistoryAsync(Guid ownerId, OutboundRequest request, OutboundResult outbound)
     {
         if (!outbound.DispatchStarted)
         {
@@ -42,7 +42,7 @@ public sealed class GetTracerUseCase(
 
         try
         {
-            await history.SaveAsync(RequestHistoryRedaction.Create(request, outbound), CancellationToken.None);
+            await history.SaveAsync(ownerId, RequestHistoryRedaction.Create(request, outbound), CancellationToken.None);
             return true;
         }
         catch (Exception)

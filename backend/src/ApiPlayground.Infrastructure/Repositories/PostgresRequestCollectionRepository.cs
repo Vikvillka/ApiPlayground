@@ -7,9 +7,10 @@ namespace ApiPlayground.Infrastructure.Outbound;
 
 public sealed class PostgresRequestCollectionRepository(PlatformDbContext dbContext) : IRequestCollectionRepository
 {
-    public async Task<IReadOnlyList<RequestCollectionSnapshot>> ListAsync(CancellationToken cancellationToken = default)
+    public async Task<IReadOnlyList<RequestCollectionSnapshot>> ListAsync(Guid ownerId, CancellationToken cancellationToken = default)
     {
         var collections = await dbContext.RequestCollections.AsNoTracking()
+            .Where(collection => collection.OwnerId == ownerId)
             .Include(collection => collection.Requests)
             .OrderBy(collection => collection.Name)
             .ToListAsync(cancellationToken);
@@ -18,25 +19,27 @@ public sealed class PostgresRequestCollectionRepository(PlatformDbContext dbCont
                 .Select(request => ToSnapshot(request, collection.Name)).ToArray())).ToArray();
     }
 
-    public async Task<SavedRequestSnapshot> SaveAsync(SavedRequestSnapshot request, Guid? collectionId, string? newCollectionName,
+    public async Task<SavedRequestSnapshot> SaveAsync(Guid ownerId, SavedRequestSnapshot request, Guid? collectionId, string? newCollectionName,
         CancellationToken cancellationToken = default)
     {
         await using var transaction = await dbContext.Database.BeginTransactionAsync(cancellationToken);
         RequestCollectionEntity collection;
         if (collectionId is { } selectedId)
         {
-            collection = await dbContext.RequestCollections.SingleOrDefaultAsync(item => item.Id == selectedId, cancellationToken)
+            collection = await dbContext.RequestCollections
+                .SingleOrDefaultAsync(item => item.Id == selectedId && item.OwnerId == ownerId, cancellationToken)
                 ?? throw new InvalidOperationException("The selected collection no longer exists.");
         }
         else
         {
-            collection = new RequestCollectionEntity { Id = Guid.NewGuid(), Name = newCollectionName! };
+            collection = new RequestCollectionEntity { Id = Guid.NewGuid(), Name = newCollectionName!, OwnerId = ownerId };
             dbContext.RequestCollections.Add(collection);
         }
 
         var entity = new SavedRequestEntity
         {
             Id = request.Id,
+            OwnerId = ownerId,
             CreatedAt = request.CreatedAt,
             Collection = collection,
             CollectionId = collection.Id,

@@ -2,10 +2,10 @@ namespace ApiPlayground.Application.Outbound;
 
 public sealed class SaveRequestUseCase(IRequestCollectionRepository store)
 {
-    public Task<IReadOnlyList<RequestCollectionSnapshot>> ListAsync(CancellationToken cancellationToken = default) =>
-        store.ListAsync(cancellationToken);
+    public Task<IReadOnlyList<RequestCollectionSnapshot>> ListAsync(Guid ownerId, CancellationToken cancellationToken = default) =>
+        store.ListAsync(ownerId, cancellationToken);
 
-    public async Task<SavedRequestSnapshot> SaveAsync(SaveRequestCommand command, CancellationToken cancellationToken = default)
+    public async Task<SavedRequestSnapshot> SaveAsync(Guid ownerId, SaveRequestCommand command, CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(command);
         if ((command.CollectionId is null) == string.IsNullOrWhiteSpace(command.NewCollectionName))
@@ -37,6 +37,6 @@ public sealed class SaveRequestUseCase(IRequestCollectionRepository store)
         var snapshot = new SavedRequestSnapshot(Guid.NewGuid(), DateTimeOffset.UtcNow, command.CollectionId ?? Guid.Empty,
             string.Empty, command.Title.Trim(), command.Method, sanitizedUrl, headers, redactedHeaders,
             string.IsNullOrWhiteSpace(command.Body) ? null : command.Body);
-        return await store.SaveAsync(snapshot, command.CollectionId, command.NewCollectionName?.Trim(), cancellationToken);
+        return await store.SaveAsync(ownerId, snapshot, command.CollectionId, command.NewCollectionName?.Trim(), cancellationToken);
     }
 }

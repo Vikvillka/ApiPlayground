@@ -1,5 +1,6 @@
 using System.Text;
 using System.Text.Json;
+using ApiPlayground.Application.Auth;
 using ApiPlayground.Application.Outbound;
 using ApiPlayground.Infrastructure.Outbound;
 using Microsoft.AspNetCore.Mvc;
@@ -10,7 +11,7 @@ namespace ApiPlayground.Api;
 
 [Route("api/tracer")]
 [TracerRequestGuardMetadata]
-public sealed class TracerRequestController(GetTracerUseCase useCase, IOptions<HttpJsonOptions> jsonOptions) : ApiControllerBase
+public sealed class TracerRequestController(GetTracerUseCase useCase, ICurrentUser currentUser, IOptions<HttpJsonOptions> jsonOptions) : ApiControllerBase
 {
     [HttpPost("get")]
     public Task<IActionResult> Get(CancellationToken cancellationToken) => ExecuteAsync(cancellationToken);
@@ -52,6 +53,11 @@ public sealed class TracerRequestController(GetTracerUseCase useCase, IOptions<H
 
     private async Task<IActionResult> ExecuteAsync(CancellationToken cancellationToken)
     {
+        if (currentUser.UserId is not { } ownerId)
+        {
+            return UnauthorizedProblem("Authentication is required.");
+        }
+
         TracerRequest? request;
         try
         {
@@ -75,7 +81,7 @@ public sealed class TracerRequestController(GetTracerUseCase useCase, IOptions<H
         }
 
         var outboundRequest = ToOutboundRequest(request, uri!);
-        var result = await useCase.ExecuteAsync(outboundRequest, cancellationToken);
+        var result = await useCase.ExecuteAsync(ownerId, outboundRequest, cancellationToken);
         if (result.Outbound is null)
         {
             return BadRequestProblem(result.Error ?? "The request could not be completed.");

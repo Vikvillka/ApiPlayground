@@ -12,7 +12,8 @@ public sealed class MigrationContinuityTests
     private const string CollectionsMigrationId = "20261025165909_RequestCollections";
     private const string DomainRequestEntitiesMigrationId = "20261029125342_DomainRequestEntities";
     private const string AspNetIdentityMigrationId = "20261104180700_AddAspNetIdentity";
-    private static readonly string[] ExpectedMigrationIds = [InitialMigrationId, HistoryMigrationId, CollectionsMigrationId, DomainRequestEntitiesMigrationId, AspNetIdentityMigrationId];
+    private const string RequestOwnershipMigrationId = "20261104184231_RequestOwnership";
+    private static readonly string[] ExpectedMigrationIds = [InitialMigrationId, HistoryMigrationId, CollectionsMigrationId, DomainRequestEntitiesMigrationId, AspNetIdentityMigrationId, RequestOwnershipMigrationId];
     private readonly string _adminConnectionString;
 
     public MigrationContinuityTests()
@@ -165,13 +166,14 @@ public sealed class MigrationContinuityTests
                     environment);
 
                 var migrationIds = await ReadMigrationIdsAsync(connectionString);
-                Assert.Equal(6, migrationIds.Length);
+                Assert.Equal(7, migrationIds.Length);
                 Assert.Equal(InitialMigrationId, migrationIds[0]);
                 Assert.Equal(HistoryMigrationId, migrationIds[1]);
                 Assert.Equal(CollectionsMigrationId, migrationIds[2]);
                 Assert.Equal(DomainRequestEntitiesMigrationId, migrationIds[3]);
                 Assert.Equal(AspNetIdentityMigrationId, migrationIds[4]);
-                Assert.Equal(generatedId, migrationIds[5]);
+                Assert.Equal(RequestOwnershipMigrationId, migrationIds[5]);
+                Assert.Equal(generatedId, migrationIds[6]);
             }
             finally
             {
@@ -209,6 +211,8 @@ public sealed class MigrationContinuityTests
         await WithDisposableDatabase(async connectionString =>
         {
             await MigrateAsync(connectionString);
+            var owner = Guid.NewGuid();
+            await TestUsers.InsertAsync(connectionString, owner);
             var id = Guid.NewGuid();
             const string queryJson = "[\"token\"]";
             const string redactedHeadersJson = "[\"authorization\"]";
@@ -217,9 +221,10 @@ public sealed class MigrationContinuityTests
             {
                 await connection.OpenAsync();
                 await using var insert = connection.CreateCommand();
-                insert.CommandText = "INSERT INTO request_history (id, created_at, method, url, redacted_query_parameters_json, headers_json, redacted_headers_json, body, failure, status_code, elapsed_ms) "
-                    + "VALUES (@id, @createdAt, 'GET', 'https://example.test/', @query, @headers, @redacted, NULL, '', 200, 12.5)";
+                insert.CommandText = "INSERT INTO request_history (id, owner_id, created_at, method, url, redacted_query_parameters_json, headers_json, redacted_headers_json, body, failure, status_code, elapsed_ms) "
+                    + "VALUES (@id, @owner, @createdAt, 'GET', 'https://example.test/', @query, @headers, @redacted, NULL, '', 200, 12.5)";
                 insert.Parameters.AddWithValue("id", id);
+                insert.Parameters.AddWithValue("owner", owner);
                 insert.Parameters.AddWithValue("createdAt", new DateTimeOffset(2026, 10, 1, 12, 0, 0, TimeSpan.Zero));
                 insert.Parameters.AddWithValue("query", queryJson);
                 insert.Parameters.AddWithValue("headers", "{\"X-Trace\":\"abc\"}");

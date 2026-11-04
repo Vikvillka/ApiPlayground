@@ -412,7 +412,7 @@ public sealed class TracerEndpointTests
     {
         var id = Guid.NewGuid();
         var historyStore = new InMemoryHistoryRepository();
-        await historyStore.SaveAsync(new RequestHistorySnapshot(
+        await historyStore.SaveAsync(Guid.Empty, new RequestHistorySnapshot(
             id,
             DateTimeOffset.Parse("2026-10-29T12:34:56Z"),
             "POST",
@@ -1082,21 +1082,21 @@ public sealed class TracerEndpointTests
 
     private sealed class FailingHistoryRepository : IRequestHistoryRepository
     {
-        public Task SaveAsync(RequestHistorySnapshot snapshot, CancellationToken cancellationToken = default) =>
+        public Task SaveAsync(Guid ownerId, RequestHistorySnapshot snapshot, CancellationToken cancellationToken = default) =>
             throw new InvalidOperationException("storage unavailable");
-        public Task<IReadOnlyList<RequestHistorySnapshot>> ListAsync(CancellationToken cancellationToken = default) =>
+        public Task<IReadOnlyList<RequestHistorySnapshot>> ListAsync(Guid ownerId, CancellationToken cancellationToken = default) =>
             Task.FromResult<IReadOnlyList<RequestHistorySnapshot>>([]);
-        public Task<RequestHistorySnapshot?> FindAsync(Guid id, CancellationToken cancellationToken = default) =>
+        public Task<RequestHistorySnapshot?> FindAsync(Guid ownerId, Guid id, CancellationToken cancellationToken = default) =>
             Task.FromResult<RequestHistorySnapshot?>(null);
     }
 
     private sealed class ThrowingHistoryRepository : IRequestHistoryRepository
     {
-        public Task SaveAsync(RequestHistorySnapshot snapshot, CancellationToken cancellationToken = default) =>
+        public Task SaveAsync(Guid ownerId, RequestHistorySnapshot snapshot, CancellationToken cancellationToken = default) =>
             throw new InvalidOperationException("storage unavailable");
-        public Task<IReadOnlyList<RequestHistorySnapshot>> ListAsync(CancellationToken cancellationToken = default) =>
+        public Task<IReadOnlyList<RequestHistorySnapshot>> ListAsync(Guid ownerId, CancellationToken cancellationToken = default) =>
             throw new InvalidOperationException("storage unavailable");
-        public Task<RequestHistorySnapshot?> FindAsync(Guid id, CancellationToken cancellationToken = default) =>
+        public Task<RequestHistorySnapshot?> FindAsync(Guid ownerId, Guid id, CancellationToken cancellationToken = default) =>
             throw new InvalidOperationException("storage unavailable");
     }
 
@@ -1115,24 +1115,24 @@ public sealed class TracerEndpointTests
     private sealed class InMemoryHistoryRepository : IRequestHistoryRepository
     {
         private readonly List<RequestHistorySnapshot> _items = [];
-        public Task SaveAsync(RequestHistorySnapshot snapshot, CancellationToken cancellationToken = default)
+        public Task SaveAsync(Guid ownerId, RequestHistorySnapshot snapshot, CancellationToken cancellationToken = default)
         {
             _items.Add(snapshot);
             return Task.CompletedTask;
         }
-        public Task<IReadOnlyList<RequestHistorySnapshot>> ListAsync(CancellationToken cancellationToken = default) =>
+        public Task<IReadOnlyList<RequestHistorySnapshot>> ListAsync(Guid ownerId, CancellationToken cancellationToken = default) =>
             Task.FromResult<IReadOnlyList<RequestHistorySnapshot>>(_items.OrderByDescending(item => item.CreatedAt).ThenByDescending(item => item.Id).ToArray());
-        public Task<RequestHistorySnapshot?> FindAsync(Guid id, CancellationToken cancellationToken = default) =>
+        public Task<RequestHistorySnapshot?> FindAsync(Guid ownerId, Guid id, CancellationToken cancellationToken = default) =>
             Task.FromResult(_items.SingleOrDefault(item => item.Id == id));
     }
 
     private sealed class InMemoryCollectionRepository : IRequestCollectionRepository
     {
         private readonly List<RequestCollectionSnapshot> _items = [];
-        public Task<IReadOnlyList<RequestCollectionSnapshot>> ListAsync(CancellationToken cancellationToken = default) =>
+        public Task<IReadOnlyList<RequestCollectionSnapshot>> ListAsync(Guid ownerId, CancellationToken cancellationToken = default) =>
             Task.FromResult<IReadOnlyList<RequestCollectionSnapshot>>(_items.ToArray());
 
-        public Task<SavedRequestSnapshot> SaveAsync(SavedRequestSnapshot request, Guid? collectionId, string? newCollectionName,
+        public Task<SavedRequestSnapshot> SaveAsync(Guid ownerId, SavedRequestSnapshot request, Guid? collectionId, string? newCollectionName,
             CancellationToken cancellationToken = default)
         {
             var collection = collectionId is null
@@ -1149,10 +1149,10 @@ public sealed class TracerEndpointTests
 
     private sealed class FailingCollectionRepository : IRequestCollectionRepository
     {
-        public Task<IReadOnlyList<RequestCollectionSnapshot>> ListAsync(CancellationToken cancellationToken = default) =>
+        public Task<IReadOnlyList<RequestCollectionSnapshot>> ListAsync(Guid ownerId, CancellationToken cancellationToken = default) =>
             throw new InvalidOperationException("database password: secret; Npgsql failure details");
 
-        public Task<SavedRequestSnapshot> SaveAsync(SavedRequestSnapshot request, Guid? collectionId, string? newCollectionName,
+        public Task<SavedRequestSnapshot> SaveAsync(Guid ownerId, SavedRequestSnapshot request, Guid? collectionId, string? newCollectionName,
             CancellationToken cancellationToken = default) => throw new InvalidOperationException("database password: secret; Npgsql failure details");
     }
 

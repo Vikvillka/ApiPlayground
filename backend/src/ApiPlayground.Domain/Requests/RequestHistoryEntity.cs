@@ -3,6 +3,7 @@ namespace ApiPlayground.Domain.Requests;
 public sealed class RequestHistoryEntity
 {
     public Guid Id { get; set; }
+    public Guid OwnerId { get; set; }
     public DateTimeOffset CreatedAt { get; set; }
     public string Method { get; set; } = string.Empty;
     public string Url { get; set; } = string.Empty;

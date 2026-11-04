@@ -3,6 +3,7 @@ namespace ApiPlayground.Domain.Requests;
 public sealed class SavedRequestEntity
 {
     public Guid Id { get; set; }
+    public Guid OwnerId { get; set; }
     public DateTimeOffset CreatedAt { get; set; }
     public Guid CollectionId { get; set; }
     public RequestCollectionEntity Collection { get; set; } = null!;

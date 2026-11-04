@@ -5,6 +5,8 @@ namespace ApiPlayground.Tests;
 
 public sealed class RequestHistoryTests
 {
+    private static readonly Guid Owner = Guid.Parse("00000000-0000-0000-0000-0000000000a1");
+
     [Fact]
     public void Snapshot_redacts_sensitive_header_values_and_query_values()
     {
@@ -62,7 +64,7 @@ public sealed class RequestHistoryTests
         var useCase = new GetTracerUseCase(new FixedExecutor(new OutboundResult(failure, null, TimeSpan.FromMilliseconds(5),
             new Dictionary<string, IReadOnlyList<string>>(), ReadOnlyMemory<byte>.Empty, "diagnostic", dispatchStarted)), store);
 
-        var result = await useCase.ExecuteAsync(new OutboundRequest(new Uri("https://example.test/"), "GET"));
+        var result = await useCase.ExecuteAsync(Owner, new OutboundRequest(new Uri("https://example.test/"), "GET"));
 
         Assert.Equal(dispatchStarted, result.Outbound!.DispatchStarted);
         Assert.Equal(dispatchStarted ? 1 : 0, store.Items.Count);
@@ -74,7 +76,7 @@ public sealed class RequestHistoryTests
         var expected = SuccessResult();
         var useCase = new GetTracerUseCase(new FixedExecutor(expected), new FailingHistoryRepository());
 
-        var result = await useCase.ExecuteAsync(new OutboundRequest(new Uri("https://example.test/"), "GET"));
+        var result = await useCase.ExecuteAsync(Owner, new OutboundRequest(new Uri("https://example.test/"), "GET"));
 
         Assert.Same(expected, result.Outbound);
         Assert.False(result.HistorySaved);
@@ -88,11 +90,11 @@ public sealed class RequestHistoryTests
         var older = RequestHistoryRedaction.Create(new OutboundRequest(new Uri("https://example.test/older"), "GET"), SuccessResult(), DateTimeOffset.UnixEpoch);
         var newerA = RequestHistoryRedaction.Create(new OutboundRequest(new Uri("https://example.test/newer-a"), "GET"), SuccessResult(), DateTimeOffset.UnixEpoch.AddSeconds(1));
         var newerB = newerA with { Id = Guid.Parse("ffffffff-ffff-ffff-ffff-ffffffffffff") };
-        await store.SaveAsync(older);
-        await store.SaveAsync(newerA);
-        await store.SaveAsync(newerB);
+        await store.SaveAsync(Owner, older);
+        await store.SaveAsync(Owner, newerA);
+        await store.SaveAsync(Owner, newerB);
 
-        var listed = await store.ListAsync();
+        var listed = await store.ListAsync(Owner);
 
         Assert.Equal(new[] { newerB.Id, newerA.Id, older.Id }, listed.Select(item => item.Id));
         Assert.DoesNotContain("response", typeof(RequestHistorySnapshot).GetProperties().Select(property => property.Name), StringComparer.OrdinalIgnoreCase);
@@ -103,9 +105,9 @@ public sealed class RequestHistoryTests
     {
         var store = new InMemoryHistoryRepository();
         var snapshot = RequestHistoryRedaction.Create(new OutboundRequest(new Uri("https://example.test/load?token="), "GET"), SuccessResult());
-        await store.SaveAsync(snapshot);
+        await store.SaveAsync(Owner, snapshot);
 
-        var loaded = await new RequestHistoryUseCase(store).FindAsync(snapshot.Id);
+        var loaded = await new RequestHistoryUseCase(store).FindAsync(Owner, snapshot.Id);
 
         Assert.Equal(snapshot, loaded);
     }
@@ -121,20 +123,20 @@ public sealed class RequestHistoryTests
     private sealed class InMemoryHistoryRepository : IRequestHistoryRepository
     {
         public List<RequestHistorySnapshot> Items { get; } = [];
-        public Task SaveAsync(RequestHistorySnapshot snapshot, CancellationToken cancellationToken = default)
+        public Task SaveAsync(Guid ownerId, RequestHistorySnapshot snapshot, CancellationToken cancellationToken = default)
         {
             Items.Add(snapshot);
             return Task.CompletedTask;
         }
-        public Task<IReadOnlyList<RequestHistorySnapshot>> ListAsync(CancellationToken cancellationToken = default) =>
+        public Task<IReadOnlyList<RequestHistorySnapshot>> ListAsync(Guid ownerId, CancellationToken cancellationToken = default) =>
             Task.FromResult<IReadOnlyList<RequestHistorySnapshot>>(Items.OrderByDescending(item => item.CreatedAt).ThenByDescending(item => item.Id).ToArray());
-        public Task<RequestHistorySnapshot?> FindAsync(Guid id, CancellationToken cancellationToken = default) => Task.FromResult(Items.SingleOrDefault(item => item.Id == id));
+        public Task<RequestHistorySnapshot?> FindAsync(Guid ownerId, Guid id, CancellationToken cancellationToken = default) => Task.FromResult(Items.SingleOrDefault(item => item.Id == id));
     }
 
     private sealed class FailingHistoryRepository : IRequestHistoryRepository
     {
-        public Task SaveAsync(RequestHistorySnapshot snapshot, CancellationToken cancellationToken = default) => throw new InvalidOperationException("storage unavailable");
-        public Task<IReadOnlyList<RequestHistorySnapshot>> ListAsync(CancellationToken cancellationToken = default) => Task.FromResult<IReadOnlyList<RequestHistorySnapshot>>([]);
-        public Task<RequestHistorySnapshot?> FindAsync(Guid id, CancellationToken cancellationToken = default) => Task.FromResult<RequestHistorySnapshot?>(null);
+        public Task SaveAsync(Guid ownerId, RequestHistorySnapshot snapshot, CancellationToken cancellationToken = default) => throw new InvalidOperationException("storage unavailable");
+        public Task<IReadOnlyList<RequestHistorySnapshot>> ListAsync(Guid ownerId, CancellationToken cancellationToken = default) => Task.FromResult<IReadOnlyList<RequestHistorySnapshot>>([]);
+        public Task<RequestHistorySnapshot?> FindAsync(Guid ownerId, Guid id, CancellationToken cancellationToken = default) => Task.FromResult<RequestHistorySnapshot?>(null);
     }
 }

@@ -111,11 +111,11 @@ public sealed class StartupConfigurationTests
 
     private sealed class NullHistoryRepository : IRequestHistoryRepository
     {
-        public Task SaveAsync(RequestHistorySnapshot snapshot, CancellationToken cancellationToken = default) =>
+        public Task SaveAsync(Guid ownerId, RequestHistorySnapshot snapshot, CancellationToken cancellationToken = default) =>
             Task.CompletedTask;
-        public Task<IReadOnlyList<RequestHistorySnapshot>> ListAsync(CancellationToken cancellationToken = default) =>
+        public Task<IReadOnlyList<RequestHistorySnapshot>> ListAsync(Guid ownerId, CancellationToken cancellationToken = default) =>
             Task.FromResult<IReadOnlyList<RequestHistorySnapshot>>([]);
-        public Task<RequestHistorySnapshot?> FindAsync(Guid id, CancellationToken cancellationToken = default) =>
+        public Task<RequestHistorySnapshot?> FindAsync(Guid ownerId, Guid id, CancellationToken cancellationToken = default) =>
             Task.FromResult<RequestHistorySnapshot?>(null);
     }
 }

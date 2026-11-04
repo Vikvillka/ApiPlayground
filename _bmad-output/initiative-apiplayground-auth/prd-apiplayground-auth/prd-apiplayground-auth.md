@@ -1,6 +1,6 @@
 ---
 title: ApiPlayground Authentication PRD
-status: draft
+status: final
 created: 2026-11-04
 updated: 2026-11-04
 ---
@@ -59,5 +59,5 @@ Out: OAuth or any third-party login, password reset, roles and permissions, emai
 ## Open items
 
 - [ASSUMPTION] No password recovery for the MVP; a forgotten password means a new account.
-- [ASSUMPTION] Password rules, session lifetime, and CSRF approach are left to architecture.
-- [ASSUMPTION] Request-send and export routes also require login.
+- [DECIDED] Session lifetime, cookie rules, and CSRF approach are set in the architecture spine (AD-2, AD-3). Password minimum is 8 characters with no composition rules (decision 2026-11-04).
+- [DECIDED] Request-send and export routes require login (FR-10).

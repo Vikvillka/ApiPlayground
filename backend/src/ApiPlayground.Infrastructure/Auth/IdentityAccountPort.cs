@@ -23,7 +23,7 @@ internal sealed class IdentityAccountPort(
         return new AccountRegistration(null, emailTaken);
     }
 
-    public async Task<Guid?> SignInAsync(string email, string password, CancellationToken cancellationToken = default)
+    public async Task<AccountSession?> SignInAsync(string email, string password, CancellationToken cancellationToken = default)
     {
         var user = await users.FindByEmailAsync(email);
         if (user is null)
@@ -34,7 +34,13 @@ internal sealed class IdentityAccountPort(
         }
 
         var result = await signIn.PasswordSignInAsync(user, password, isPersistent: true, lockoutOnFailure: false);
-        return result.Succeeded ? user.Id : null;
+        return result.Succeeded ? new AccountSession(user.Id, user.Email ?? email) : null;
+    }
+
+    public async Task<string?> FindEmailAsync(Guid userId, CancellationToken cancellationToken = default)
+    {
+        var user = await users.FindByIdAsync(userId.ToString());
+        return user?.Email;
     }
 
     public async Task SignOutAsync(CancellationToken cancellationToken = default)

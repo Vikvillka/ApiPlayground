@@ -54,8 +54,8 @@ describe("auth screen", () => {
     expect(await screen.findByRole("alert")).toHaveTextContent("An account with this email already exists.");
   });
 
-  it("logs in and hands the user id to the gate", async () => {
-    vi.stubGlobal("fetch", vi.fn().mockResolvedValueOnce(json({ id: "user-42" })));
+  it("logs in and hands the profile to the gate", async () => {
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValueOnce(json({ id: "user-42", email: "visitor@example.test" })));
     const onSignedIn = vi.fn();
     render(<AuthScreen notice={null} onSignedIn={onSignedIn} />);
 
@@ -63,7 +63,7 @@ describe("auth screen", () => {
     fill("visitor@example.test", "secret1");
     fireEvent.click(screen.getByRole("button", { name: "Log in" }));
 
-    await waitFor(() => expect(onSignedIn).toHaveBeenCalledWith("user-42"));
+    await waitFor(() => expect(onSignedIn).toHaveBeenCalledWith({ id: "user-42", email: "visitor@example.test" }));
   });
 
   it("shows the server message for wrong credentials and stays on the form", async () => {

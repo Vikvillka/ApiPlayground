@@ -29,7 +29,7 @@ public sealed class AuthController(
         var result = await signIn.ExecuteAsync(request?.Email, request?.Password, cancellationToken);
         if (result.Succeeded)
         {
-            return Ok(new { id = result.UserId });
+            return Ok(new { id = result.UserId, email = result.Email });
         }
 
         return result.Error == SignInUseCase.InvalidCredentialsMessage
@@ -45,11 +45,11 @@ public sealed class AuthController(
     }
 
     [HttpGet("me")]
-    public IActionResult Me()
+    public async Task<IActionResult> Me(CancellationToken cancellationToken)
     {
-        var userId = currentUser.Execute();
-        return userId is null
+        var session = await currentUser.ExecuteAsync(cancellationToken);
+        return session is null
             ? UnauthorizedProblem("Authentication is required.")
-            : Ok(new { id = userId });
+            : Ok(new { id = session.UserId, email = session.Email });
     }
 }

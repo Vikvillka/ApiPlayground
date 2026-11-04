@@ -31,6 +31,8 @@ public sealed class AuthEndpointTests
 
         var me = await client.SendAsync(WithCookie(CreateRequest(HttpMethod.Get, "/api/auth/me"), cookie));
         Assert.Equal(HttpStatusCode.OK, me.StatusCode);
+        var meBody = await me.Content.ReadAsStringAsync();
+        Assert.Contains(Email, meBody, StringComparison.Ordinal);
 
         var logout = await client.SendAsync(WithCookie(CreateRequest(HttpMethod.Post, "/api/auth/logout", "{}"), cookie));
         Assert.Equal(HttpStatusCode.NoContent, logout.StatusCode);

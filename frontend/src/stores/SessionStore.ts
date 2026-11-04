@@ -1,5 +1,5 @@
 import { makeAutoObservable, runInAction } from "mobx";
-import { fetchCurrentUserId, logOut } from "../api/authApi";
+import { fetchCurrentUser, logOut, type AccountProfile } from "../api/authApi";
 import { errorMessage } from "../request/requestHelpers";
 
 export type SessionStatus = "checking" | "signedOut" | "signedIn";
@@ -7,33 +7,36 @@ export type SessionStatus = "checking" | "signedOut" | "signedIn";
 export class SessionStore {
   status: SessionStatus;
   userId: string | null;
+  email: string | null;
   // Shown on the auth screen, for example after the session expired.
   notice: string | null = null;
   logOutError: string | null = null;
 
-  constructor(initial: { status: SessionStatus; userId?: string | null } = { status: "checking" }) {
+  constructor(initial: { status: SessionStatus; userId?: string | null; email?: string | null } = { status: "checking" }) {
     this.status = initial.status;
     this.userId = initial.userId ?? null;
+    this.email = initial.email ?? null;
     makeAutoObservable(this);
   }
 
   // Asks the server who the cookie belongs to. Any failure is treated as signed out.
   async restore(): Promise<void> {
-    let userId: string | null = null;
+    let profile: AccountProfile | null = null;
     try {
-      userId = await fetchCurrentUserId();
+      profile = await fetchCurrentUser();
     } catch {
-      userId = null;
+      profile = null;
     }
     runInAction(() => {
-      if (userId) this.signIn(userId);
+      if (profile) this.signIn(profile);
       else this.setSignedOut(null);
     });
   }
 
-  signIn(userId: string): void {
+  signIn(profile: AccountProfile): void {
     this.status = "signedIn";
-    this.userId = userId;
+    this.userId = profile.id;
+    this.email = profile.email;
     this.notice = null;
     this.logOutError = null;
   }
@@ -57,6 +60,7 @@ export class SessionStore {
   setSignedOut(notice: string | null): void {
     this.status = "signedOut";
     this.userId = null;
+    this.email = null;
     this.notice = notice;
     this.logOutError = null;
   }

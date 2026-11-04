@@ -42,7 +42,7 @@ const SessionView = observer(function SessionView({ children }: { children: Reac
     return <Typography role="status" sx={{ p: 4, textAlign: "center" }}>Checking session…</Typography>;
   }
   if (session.status === "signedOut") {
-    return <AuthScreen notice={session.notice} onSignedIn={userId => session.signIn(userId)} />;
+    return <AuthScreen notice={session.notice} onSignedIn={profile => session.signIn(profile)} />;
   }
   return <>{children}</>;
 });

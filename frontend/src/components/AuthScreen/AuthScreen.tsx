@@ -1,6 +1,6 @@
 import { useState, type FormEvent } from "react";
 import { Box, Button, Paper, TextField, Typography } from "@mui/material";
-import { logIn, registerAccount } from "../../api/authApi";
+import { logIn, registerAccount, type AccountProfile } from "../../api/authApi";
 import { errorMessage } from "../../request/requestHelpers";
 import { authScreenStyles } from "./AuthScreen.styles";
 
@@ -11,7 +11,7 @@ const minimumPasswordLength = 8;
 type AuthScreenProps = {
   // Shown above the form, for example "Please sign in again." after the session expired.
   notice: string | null;
-  onSignedIn: (userId: string) => void;
+  onSignedIn: (profile: AccountProfile) => void;
 };
 
 // Full-page gate for signed-out visitors. Starts on registration; errors stay in the form so the user can retry.
@@ -49,8 +49,8 @@ export function AuthScreen({ notice, onSignedIn }: AuthScreenProps) {
         setRegisteredNotice("Account created. Log in to continue.");
         setBusy(false);
       } else {
-        const userId = await logIn(credentials);
-        onSignedIn(userId);
+        const profile = await logIn(credentials);
+        onSignedIn(profile);
       }
     } catch (cause) {
       setError(errorMessage(cause, "Something went wrong. Try again."));

@@ -5,7 +5,7 @@ public sealed record RegisterAccountResult(Guid? UserId, string? Error)
     public bool Succeeded => UserId is not null && Error is null;
 }
 
-public sealed record SignInResult(bool Succeeded, string? Error, Guid? UserId = null);
+public sealed record SignInResult(bool Succeeded, string? Error, Guid? UserId = null, string? Email = null);
 
 public sealed class RegisterAccountUseCase(IAccountPort accounts)
 {
@@ -49,9 +49,9 @@ public sealed class SignInUseCase(IAccountPort accounts)
             return new SignInResult(false, "Enter an email and password.");
         }
 
-        var userId = await accounts.SignInAsync(email.Trim(), password, cancellationToken);
-        return userId is not null
-            ? new SignInResult(true, null, userId)
+        var session = await accounts.SignInAsync(email.Trim(), password, cancellationToken);
+        return session is not null
+            ? new SignInResult(true, null, session.UserId, session.Email)
             : new SignInResult(false, InvalidCredentialsMessage);
     }
 }
@@ -62,7 +62,16 @@ public sealed class SignOutUseCase(IAccountPort accounts)
         accounts.SignOutAsync(cancellationToken);
 }
 
-public sealed class CurrentUserUseCase(ICurrentUser currentUser)
+public sealed class CurrentUserUseCase(ICurrentUser currentUser, IAccountPort accounts)
 {
-    public Guid? Execute() => currentUser.UserId;
+    public async Task<AccountSession?> ExecuteAsync(CancellationToken cancellationToken = default)
+    {
+        if (currentUser.UserId is not { } userId)
+        {
+            return null;
+        }
+
+        var email = await accounts.FindEmailAsync(userId, cancellationToken);
+        return email is null ? null : new AccountSession(userId, email);
+    }
 }

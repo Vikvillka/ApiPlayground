@@ -26,7 +26,7 @@ export const TopBar = observer(function TopBar({ historyOpen, onToggleHistory }:
       </Box>
       <Box sx={topBarStyles.actions}>
         {session.logOutError && <Typography role="alert" color="error" variant="body2">{session.logOutError}</Typography>}
-        {session.userId && <Typography variant="body2" color="text.secondary">Signed in as {session.userId}</Typography>}
+        {session.email && <Typography variant="body2" color="text.secondary">Signed in as {session.email}</Typography>}
         <Button variant="outlined" onClick={() => void session.logOut()}>Log out</Button>
         <Button
           variant="outlined"

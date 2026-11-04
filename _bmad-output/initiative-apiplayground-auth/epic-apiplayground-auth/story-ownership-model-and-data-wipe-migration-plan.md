@@ -1,7 +1,7 @@
 ---
 title: 'Ownership model and data-wipe migration'
 type: 'feature'
-ticket: '1.3'
+ticket: '3'
 created: '2026-11-04'
 status: built
 route: 'full'

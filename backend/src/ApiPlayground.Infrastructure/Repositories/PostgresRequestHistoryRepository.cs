@@ -9,12 +9,14 @@ public sealed class PostgresRequestHistoryRepository(PlatformDbContext dbContext
 {
     public async Task SaveAsync(Guid ownerId, RequestHistorySnapshot snapshot, CancellationToken cancellationToken = default)
     {
+        dbContext.OwnerScope = ownerId;
         dbContext.RequestHistory.Add(ToEntity(ownerId, snapshot));
         await dbContext.SaveChangesAsync(cancellationToken);
     }
 
     public async Task<IReadOnlyList<RequestHistorySnapshot>> ListAsync(Guid ownerId, CancellationToken cancellationToken = default)
     {
+        dbContext.OwnerScope = ownerId;
         var rows = await dbContext.RequestHistory.AsNoTracking()
             .Where(row => row.OwnerId == ownerId)
             .OrderByDescending(row => row.CreatedAt).ThenByDescending(row => row.Id)
@@ -24,6 +26,7 @@ public sealed class PostgresRequestHistoryRepository(PlatformDbContext dbContext
 
     public async Task<RequestHistorySnapshot?> FindAsync(Guid ownerId, Guid id, CancellationToken cancellationToken = default)
     {
+        dbContext.OwnerScope = ownerId;
         var row = await dbContext.RequestHistory.AsNoTracking()
             .SingleOrDefaultAsync(item => item.Id == id && item.OwnerId == ownerId, cancellationToken);
         return row is null ? null : ToSnapshot(row);

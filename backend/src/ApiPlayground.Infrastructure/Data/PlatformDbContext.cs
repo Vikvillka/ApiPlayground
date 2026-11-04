@@ -44,6 +44,7 @@ public sealed class PlatformDbContext(DbContextOptions<PlatformDbContext> option
 		history.Property(item => item.OwnerId).HasColumnName("owner_id").IsRequired();
 		history.HasOne<IdentityUser<Guid>>().WithMany().HasForeignKey(item => item.OwnerId).OnDelete(DeleteBehavior.Cascade);
 		history.HasIndex(item => new { item.CreatedAt, item.Id });
+		history.HasQueryFilter(item => OwnerScope != null && item.OwnerId == OwnerScope);
 
 		var collection = modelBuilder.Entity<RequestCollectionEntity>();
 		collection.ToTable("request_collections");

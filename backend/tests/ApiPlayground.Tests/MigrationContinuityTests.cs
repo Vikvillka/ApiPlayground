@@ -235,7 +235,7 @@ public sealed class MigrationContinuityTests
             var options = new DbContextOptionsBuilder<ApiPlayground.Api.Data.PlatformDbContext>()
                 .UseNpgsql(connectionString, postgres => postgres.MigrationsAssembly("ApiPlayground.Infrastructure"))
                 .Options;
-            await using (var context = new ApiPlayground.Api.Data.PlatformDbContext(options))
+            await using (var context = new ApiPlayground.Api.Data.PlatformDbContext(options) { OwnerScope = owner })
             {
                 var entity = await context.RequestHistory.SingleAsync(item => item.Id == id);
                 Assert.Equal(["token"], entity.RedactedQueryParameters);

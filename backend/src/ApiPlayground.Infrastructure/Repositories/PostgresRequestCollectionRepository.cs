@@ -9,6 +9,7 @@ public sealed class PostgresRequestCollectionRepository(PlatformDbContext dbCont
 {
     public async Task<IReadOnlyList<RequestCollectionSnapshot>> ListAsync(Guid ownerId, CancellationToken cancellationToken = default)
     {
+        dbContext.OwnerScope = ownerId;
         var collections = await dbContext.RequestCollections.AsNoTracking()
             .Where(collection => collection.OwnerId == ownerId)
             .Include(collection => collection.Requests)
@@ -22,13 +23,14 @@ public sealed class PostgresRequestCollectionRepository(PlatformDbContext dbCont
     public async Task<SavedRequestSnapshot> SaveAsync(Guid ownerId, SavedRequestSnapshot request, Guid? collectionId, string? newCollectionName,
         CancellationToken cancellationToken = default)
     {
+        dbContext.OwnerScope = ownerId;
         await using var transaction = await dbContext.Database.BeginTransactionAsync(cancellationToken);
         RequestCollectionEntity collection;
         if (collectionId is { } selectedId)
         {
             collection = await dbContext.RequestCollections
                 .SingleOrDefaultAsync(item => item.Id == selectedId && item.OwnerId == ownerId, cancellationToken)
-                ?? throw new InvalidOperationException("The selected collection no longer exists.");
+                ?? throw new CollectionNotFoundException();
         }
         else
         {

@@ -11,6 +11,9 @@ public abstract class ApiControllerBase : ControllerBase
     protected IActionResult BadRequestProblem(string detail) =>
         Problem(detail: detail, statusCode: StatusCodes.Status400BadRequest);
 
+    protected IActionResult NotFoundProblem(string detail) =>
+        Problem(detail: detail, statusCode: StatusCodes.Status404NotFound);
+
     protected IActionResult ServiceUnavailableProblem(string detail) =>
         Problem(detail: detail, statusCode: StatusCodes.Status503ServiceUnavailable);
 

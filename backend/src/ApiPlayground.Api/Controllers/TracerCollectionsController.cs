@@ -82,6 +82,10 @@ public sealed class TracerCollectionsController(
         {
             return BadRequestProblem(exception.Message);
         }
+        catch (CollectionNotFoundException exception)
+        {
+            return NotFoundProblem(exception.Message);
+        }
         catch (Exception exception)
         {
             ApiLog.CollectionOperationFailed(logger, "Collection save", exception.GetType().Name, HttpContext.TraceIdentifier);

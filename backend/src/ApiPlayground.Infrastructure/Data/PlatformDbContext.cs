@@ -17,6 +17,9 @@ public sealed class PlatformDbContext(DbContextOptions<PlatformDbContext> option
 	public DbSet<RequestCollectionEntity> RequestCollections => Set<RequestCollectionEntity>();
 	public DbSet<SavedRequestEntity> SavedRequests => Set<SavedRequestEntity>();
 
+        // Owner scope for the query filters below. Repositories set it from their owner parameter before querying,
+        // so a query made without a scope returns no collection or saved-request rows.
+        public Guid? OwnerScope { get; set; }
 	protected override void OnModelCreating(ModelBuilder modelBuilder)
 	{
 		base.OnModelCreating(modelBuilder);
@@ -52,6 +55,7 @@ public sealed class PlatformDbContext(DbContextOptions<PlatformDbContext> option
 		collection.HasIndex(item => new { item.OwnerId, item.Name }).IsUnique();
 		collection.HasMany(item => item.Requests).WithOne(item => item.Collection)
 			.HasForeignKey(item => item.CollectionId).OnDelete(DeleteBehavior.Cascade);
+		collection.HasQueryFilter(item => OwnerScope != null && item.OwnerId == OwnerScope);
 
 		var savedRequest = modelBuilder.Entity<SavedRequestEntity>();
 		savedRequest.ToTable("saved_requests");
@@ -70,6 +74,7 @@ public sealed class PlatformDbContext(DbContextOptions<PlatformDbContext> option
 		savedRequest.Property(item => item.OwnerId).HasColumnName("owner_id").IsRequired();
 		savedRequest.HasOne<IdentityUser<Guid>>().WithMany().HasForeignKey(item => item.OwnerId).OnDelete(DeleteBehavior.Cascade);
 		savedRequest.HasIndex(item => new { item.CollectionId, item.CreatedAt, item.Id });
+		savedRequest.HasQueryFilter(item => OwnerScope != null && item.OwnerId == OwnerScope);
 	}
 
 	// Typed Domain fields are stored in the existing JSON text columns; the serialized form is unchanged.

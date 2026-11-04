@@ -2,6 +2,7 @@ import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
 import { App } from "./App";
 import { AppProviders } from "./app/AppProviders";
+import { SessionGate } from "./components/SessionGate/SessionGate";
 
 const rootElement = document.getElementById("root");
 
@@ -12,7 +13,9 @@ if (!rootElement) {
 createRoot(rootElement).render(
   <StrictMode>
     <AppProviders>
-      <App />
+      <SessionGate>
+        <App />
+      </SessionGate>
     </AppProviders>
   </StrictMode>,
 );

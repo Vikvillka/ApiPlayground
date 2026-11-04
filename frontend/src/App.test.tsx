@@ -1,8 +1,21 @@
-import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
+import { fireEvent, render as renderWithTestingLibrary, screen, waitFor, within } from "@testing-library/react";
+import { useState, type ReactElement, type ReactNode } from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { App } from "./App";
+import { SessionProvider } from "./components/SessionGate/SessionGate";
+import { SessionStore } from "./stores/SessionStore";
 
 afterEach(() => vi.unstubAllGlobals());
+
+// The gate sits outside App in main.tsx, so these tests start with an already signed-in session.
+function SignedInSession({ children }: { children: ReactNode }) {
+  const [store] = useState(() => new SessionStore({ status: "signedIn", userId: "user-1" }));
+  return <SessionProvider store={store}>{children}</SessionProvider>;
+}
+
+function render(ui: ReactElement) {
+  return renderWithTestingLibrary(ui, { wrapper: SignedInSession });
+}
 
 describe("request workspace", () => {
   it("starts with blank URL and disabled Send", () => {

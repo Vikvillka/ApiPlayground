@@ -21,6 +21,16 @@ function parseBody(text: string): unknown {
   }
 }
 
+// Auth routes answer 401 as a normal outcome (wrong password, no session yet), so they never trigger the session hook.
+const sessionExemptPaths = new Set(["/api/auth/login", "/api/auth/register", "/api/auth/me"]);
+
+let onUnauthorized: (() => void) | null = null;
+
+// Registered by the session gate. Any other 401 means the session expired and the visitor must sign in again.
+export function setUnauthorizedHandler(handler: (() => void) | null): void {
+  onUnauthorized = handler;
+}
+
 // The single place that calls fetch for the local API. Callers decide what each status means.
 export async function apiFetch(path: string, method: HttpMethod, payload?: unknown): Promise<ApiResult> {
   const response = await fetch(path, {
@@ -29,6 +39,7 @@ export async function apiFetch(path: string, method: HttpMethod, payload?: unkno
     body: payload === undefined ? undefined : JSON.stringify(payload),
   });
   const text = await response.text();
+  if (response.status === 401 && onUnauthorized && !sessionExemptPaths.has(path)) onUnauthorized();
   return { ok: response.ok, status: response.status, body: parseBody(text) };
 }
 

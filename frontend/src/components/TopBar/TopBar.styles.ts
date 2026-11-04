@@ -14,6 +14,13 @@ export const topBarStyles = {
     alignItems: "center",
     gap: 1.25,
   },
+  actions: {
+    display: "flex",
+    alignItems: "center",
+    flexWrap: "wrap",
+    justifyContent: "flex-end",
+    gap: 1,
+  },
   logo: {
     display: "grid",
     placeItems: "center",

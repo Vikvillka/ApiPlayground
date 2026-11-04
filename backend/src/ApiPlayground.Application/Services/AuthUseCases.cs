@@ -9,6 +9,8 @@ public sealed record SignInResult(bool Succeeded, string? Error, Guid? UserId = 
 
 public sealed class RegisterAccountUseCase(IAccountPort accounts)
 {
+    public const string DuplicateEmailMessage = "An account with this email already exists.";
+
     public async Task<RegisterAccountResult> ExecuteAsync(string? email, string? password, CancellationToken cancellationToken = default)
     {
         var emailError = AccountCredentialValidation.ValidateEmail(email);
@@ -23,10 +25,15 @@ public sealed class RegisterAccountUseCase(IAccountPort accounts)
             return new RegisterAccountResult(null, passwordError);
         }
 
-        var userId = await accounts.RegisterAsync(email!.Trim(), password!, cancellationToken);
-        return userId is null
-            ? new RegisterAccountResult(null, "The account could not be created.")
-            : new RegisterAccountResult(userId, null);
+        var registration = await accounts.RegisterAsync(email!.Trim(), password!, cancellationToken);
+        if (registration.UserId is not null)
+        {
+            return new RegisterAccountResult(registration.UserId, null);
+        }
+
+        return registration.EmailTaken
+            ? new RegisterAccountResult(null, DuplicateEmailMessage)
+            : new RegisterAccountResult(null, "The account could not be created.");
     }
 }
 

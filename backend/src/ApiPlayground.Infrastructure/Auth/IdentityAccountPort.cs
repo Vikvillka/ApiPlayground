@@ -9,11 +9,18 @@ internal sealed class IdentityAccountPort(
     UserManager<IdentityUser<Guid>> users,
     SignInManager<IdentityUser<Guid>> signIn) : IAccountPort
 {
-    public async Task<Guid?> RegisterAsync(string email, string password, CancellationToken cancellationToken = default)
+    public async Task<AccountRegistration> RegisterAsync(string email, string password, CancellationToken cancellationToken = default)
     {
         var user = new IdentityUser<Guid> { Id = Guid.NewGuid(), UserName = email, Email = email };
         var result = await users.CreateAsync(user, password);
-        return result.Succeeded ? user.Id : null;
+        if (result.Succeeded)
+        {
+            return new AccountRegistration(user.Id, EmailTaken: false);
+        }
+
+        // UserName is the email, so Identity reports a taken email as a duplicate user name or duplicate email.
+        var emailTaken = result.Errors.Any(error => error.Code is "DuplicateUserName" or "DuplicateEmail");
+        return new AccountRegistration(null, emailTaken);
     }
 
     public async Task<Guid?> SignInAsync(string email, string password, CancellationToken cancellationToken = default)

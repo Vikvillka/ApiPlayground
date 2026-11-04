@@ -84,6 +84,8 @@ public sealed class AuthEndpointTests
         var duplicate = await client.SendAsync(CreateRequest(HttpMethod.Post, "/api/auth/register", new AuthCredentialsRequest(Email, Password)));
         Assert.Equal(HttpStatusCode.Created, first.StatusCode);
         Assert.Equal(HttpStatusCode.BadRequest, duplicate.StatusCode);
+        var duplicateBody = await duplicate.Content.ReadAsStringAsync();
+        Assert.Contains("An account with this email already exists.", duplicateBody, StringComparison.Ordinal);
     }
 
     [Fact]

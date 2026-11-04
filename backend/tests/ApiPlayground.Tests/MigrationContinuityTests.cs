@@ -11,7 +11,8 @@ public sealed class MigrationContinuityTests
     private const string HistoryMigrationId = "20261023000000_RequestHistory";
     private const string CollectionsMigrationId = "20261025165909_RequestCollections";
     private const string DomainRequestEntitiesMigrationId = "20261029125342_DomainRequestEntities";
-    private static readonly string[] ExpectedMigrationIds = [InitialMigrationId, HistoryMigrationId, CollectionsMigrationId, DomainRequestEntitiesMigrationId];
+    private const string AspNetIdentityMigrationId = "20261104180700_AddAspNetIdentity";
+    private static readonly string[] ExpectedMigrationIds = [InitialMigrationId, HistoryMigrationId, CollectionsMigrationId, DomainRequestEntitiesMigrationId, AspNetIdentityMigrationId];
     private readonly string _adminConnectionString;
 
     public MigrationContinuityTests()
@@ -164,12 +165,13 @@ public sealed class MigrationContinuityTests
                     environment);
 
                 var migrationIds = await ReadMigrationIdsAsync(connectionString);
-                Assert.Equal(5, migrationIds.Length);
+                Assert.Equal(6, migrationIds.Length);
                 Assert.Equal(InitialMigrationId, migrationIds[0]);
                 Assert.Equal(HistoryMigrationId, migrationIds[1]);
                 Assert.Equal(CollectionsMigrationId, migrationIds[2]);
                 Assert.Equal(DomainRequestEntitiesMigrationId, migrationIds[3]);
-                Assert.Equal(generatedId, migrationIds[4]);
+                Assert.Equal(AspNetIdentityMigrationId, migrationIds[4]);
+                Assert.Equal(generatedId, migrationIds[5]);
             }
             finally
             {

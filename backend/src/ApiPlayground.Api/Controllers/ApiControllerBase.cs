@@ -13,4 +13,7 @@ public abstract class ApiControllerBase : ControllerBase
 
     protected IActionResult ServiceUnavailableProblem(string detail) =>
         Problem(detail: detail, statusCode: StatusCodes.Status503ServiceUnavailable);
+
+    protected IActionResult UnauthorizedProblem(string detail) =>
+        Problem(detail: detail, statusCode: StatusCodes.Status401Unauthorized);
 }

@@ -1,5 +1,9 @@
 using ApiPlayground.Api.Data;
+using ApiPlayground.Application.Auth;
 using ApiPlayground.Application.Outbound;
+using ApiPlayground.Infrastructure.Auth;
+using Microsoft.AspNetCore.Http;
+using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
@@ -31,8 +35,55 @@ public static class DependencyInjection
         services.AddScoped<IRequestHistoryRepository, PostgresRequestHistoryRepository>();
         services.AddScoped<IRequestCollectionRepository, PostgresRequestCollectionRepository>();
 
+        AddIdentitySession(services);
+
         return services;
     }
+
+    // Identity stays in Infrastructure. Users are keyed by Guid and there are no roles. The session is an httpOnly,
+    // SameSite=Strict cookie with about 8 hours of sliding lifetime. Anonymous requests get ProblemDetails, not redirects.
+    private static void AddIdentitySession(IServiceCollection services)
+    {
+        services.AddHttpContextAccessor();
+        services.AddIdentityCore<IdentityUser<Guid>>(options =>
+            {
+                options.User.RequireUniqueEmail = true;
+                options.Password.RequiredLength = 8;
+                options.Password.RequireDigit = false;
+                options.Password.RequireLowercase = false;
+                options.Password.RequireUppercase = false;
+                options.Password.RequireNonAlphanumeric = false;
+                options.Password.RequiredUniqueChars = 1;
+                options.Lockout.AllowedForNewUsers = false;
+                options.SignIn.RequireConfirmedAccount = false;
+            })
+            .AddEntityFrameworkStores<PlatformDbContext>()
+            .AddSignInManager();
+
+        services.AddAuthentication(IdentityConstants.ApplicationScheme).AddIdentityCookies();
+        // Validate the security stamp on every request so a sign-out rotates it and invalidates copies of the cookie.
+        services.Configure<SecurityStampValidatorOptions>(options => options.ValidationInterval = TimeSpan.Zero);
+        services.ConfigureApplicationCookie(options =>
+        {
+            options.Cookie.Name = "ApiPlayground.Session";
+            options.Cookie.HttpOnly = true;
+            options.Cookie.SameSite = SameSiteMode.Strict;
+            options.Cookie.SecurePolicy = CookieSecurePolicy.SameAsRequest;
+            options.ExpireTimeSpan = TimeSpan.FromHours(8);
+            options.SlidingExpiration = true;
+            options.Events.OnValidatePrincipal = SecurityStampValidator.ValidatePrincipalAsync;
+            options.Events.OnRedirectToLogin = context =>
+                WriteProblemAsync(context.HttpContext, StatusCodes.Status401Unauthorized, "Authentication is required.");
+            options.Events.OnRedirectToAccessDenied = context =>
+                WriteProblemAsync(context.HttpContext, StatusCodes.Status403Forbidden, "Access is denied.");
+        });
+
+        services.AddScoped<IAccountPort, IdentityAccountPort>();
+        services.AddScoped<ICurrentUser, HttpCurrentUser>();
+    }
+
+    private static Task WriteProblemAsync(HttpContext context, int statusCode, string title) =>
+        Results.Problem(statusCode: statusCode, title: title).ExecuteAsync(context);
 
     public static IServiceCollection AddGuardedOutbound(this IServiceCollection services, OutboundPolicy policy)
     {

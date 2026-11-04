@@ -45,6 +45,7 @@ public sealed class StartupConfigurationTests
             .ConfigureLogging(logging => logging.AddProvider(capture))
             .ConfigureTestServices(services =>
             {
+                TestAuthentication.Configure(services);
                 services.RemoveAll<IOutboundRequestExecutor>();
                 services.AddSingleton<IOutboundRequestExecutor>(new ThrowingExecutor(
                     new InvalidOperationException("upstream rejected " + querySecret)));

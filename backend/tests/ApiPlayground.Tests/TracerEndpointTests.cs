@@ -255,6 +255,7 @@ public sealed class TracerEndpointTests
             new Dictionary<string, IReadOnlyList<string>>(), Encoding.UTF8.GetBytes("created"), DispatchStarted: true));
         var factory = new WebApplicationFactory<Program>().WithWebHostBuilder(builder => builder.ConfigureTestServices(services =>
         {
+            TestAuthentication.Configure(services);
             services.RemoveAll<IOutboundRequestExecutor>();
             services.AddSingleton<IOutboundRequestExecutor>(executor);
             services.RemoveAll<IRequestHistoryRepository>();
@@ -376,6 +377,7 @@ public sealed class TracerEndpointTests
         });
         var factory = new WebApplicationFactory<Program>().WithWebHostBuilder(builder => builder.ConfigureTestServices(services =>
         {
+            TestAuthentication.Configure(services);
             services.RemoveAll<IOutboundRequestExecutor>();
             services.AddSingleton<IOutboundRequestExecutor>(new GuardedTargetHttpClient(
                 OutboundPolicy.ForTestOnlyLoopbackEndpoint(target.BaseAddress),
@@ -424,6 +426,7 @@ public sealed class TracerEndpointTests
             12.5));
         await using var factory = new WebApplicationFactory<Program>().WithWebHostBuilder(builder => builder.ConfigureTestServices(services =>
         {
+            TestAuthentication.Configure(services);
             services.RemoveAll<IRequestHistoryRepository>();
             services.AddSingleton<IRequestHistoryRepository>(historyStore);
         }));
@@ -546,7 +549,10 @@ public sealed class TracerEndpointTests
     [InlineData("{\"title\":3}")]
     public async Task Collection_save_preserves_empty_bad_request_for_invalid_body_binding(string json)
     {
-        await using var factory = new WebApplicationFactory<Program>();
+        await using var factory = new WebApplicationFactory<Program>().WithWebHostBuilder(builder => builder.ConfigureTestServices(services =>
+        {
+            TestAuthentication.Configure(services);
+        }));
         using var request = CreateAllowedRequest(string.Empty, path: "/api/tracer/collections/requests");
         request.Content = new StringContent(json, Encoding.UTF8, "application/json");
 
@@ -560,6 +566,7 @@ public sealed class TracerEndpointTests
     {
         await using var factory = new WebApplicationFactory<Program>().WithWebHostBuilder(builder => builder.ConfigureTestServices(services =>
         {
+            TestAuthentication.Configure(services);
             services.RemoveAll<IRequestHistoryRepository>();
             services.AddSingleton<IRequestHistoryRepository>(new ThrowingHistoryRepository());
         }));
@@ -579,7 +586,10 @@ public sealed class TracerEndpointTests
     [Fact]
     public async Task Unknown_non_tracer_routes_remain_bodyless_not_found()
     {
-        await using var factory = new WebApplicationFactory<Program>();
+        await using var factory = new WebApplicationFactory<Program>().WithWebHostBuilder(builder => builder.ConfigureTestServices(services =>
+        {
+            TestAuthentication.Configure(services);
+        }));
         using var request = CreateAllowedRequest(string.Empty, HttpMethod.Get, "/api/unknown-route");
 
         using var response = await factory.CreateClient().SendAsync(request);
@@ -593,6 +603,7 @@ public sealed class TracerEndpointTests
         var store = new InMemoryCollectionRepository();
         await using var factory = new WebApplicationFactory<Program>().WithWebHostBuilder(builder => builder.ConfigureTestServices(services =>
         {
+            TestAuthentication.Configure(services);
             services.RemoveAll<IRequestCollectionRepository>();
             services.AddSingleton<IRequestCollectionRepository>(store);
         }));
@@ -653,6 +664,7 @@ public sealed class TracerEndpointTests
     {
         await using var factory = new WebApplicationFactory<Program>().WithWebHostBuilder(builder => builder.ConfigureTestServices(services =>
         {
+            TestAuthentication.Configure(services);
             services.RemoveAll<IRequestCollectionRepository>();
             services.AddSingleton<IRequestCollectionRepository>(new FailingCollectionRepository());
         }));
@@ -671,7 +683,10 @@ public sealed class TracerEndpointTests
     [Fact]
     public async Task Collection_save_validation_failure_returns_problem_details_without_storage_errors()
     {
-        await using var factory = new WebApplicationFactory<Program>();
+        await using var factory = new WebApplicationFactory<Program>().WithWebHostBuilder(builder => builder.ConfigureTestServices(services =>
+        {
+            TestAuthentication.Configure(services);
+        }));
         using var request = CreateAllowedRequest(string.Empty, path: "/api/tracer/collections/requests");
         request.Content = JsonContent.Create(new
         {
@@ -694,6 +709,7 @@ public sealed class TracerEndpointTests
     {
         await using var factory = new WebApplicationFactory<Program>().WithWebHostBuilder(builder => builder.ConfigureTestServices(services =>
         {
+            TestAuthentication.Configure(services);
             services.RemoveAll<IRequestCollectionRepository>();
             services.AddSingleton<IRequestCollectionRepository>(new FailingCollectionRepository());
         }));
@@ -860,6 +876,7 @@ public sealed class TracerEndpointTests
     private static WebApplicationFactory<Program> CreateGuardedFactory(Uri targetAddress) =>
         new WebApplicationFactory<Program>().WithWebHostBuilder(builder => builder.ConfigureTestServices(services =>
         {
+            TestAuthentication.Configure(services);
             services.RemoveAll<IOutboundRequestExecutor>();
             services.AddSingleton<IOutboundRequestExecutor>(new GuardedTargetHttpClient(
                 OutboundPolicy.ForTestOnlyLoopbackEndpoint(targetAddress),
@@ -891,6 +908,7 @@ public sealed class TracerEndpointTests
     {
         var factory = new WebApplicationFactory<Program>().WithWebHostBuilder(builder => builder.ConfigureTestServices(services =>
         {
+            TestAuthentication.Configure(services);
             services.RemoveAll<IOutboundRequestExecutor>();
             services.AddSingleton<IOutboundRequestExecutor>(new FixedResultExecutor(new OutboundResult(
                 OutboundFailure.PolicyRejected, null, TimeSpan.Zero,
@@ -1038,6 +1056,7 @@ public sealed class TracerEndpointTests
     private static WebApplicationFactory<Program> CreateFactory(IOutboundRequestExecutor executor) =>
         new WebApplicationFactory<Program>().WithWebHostBuilder(builder => builder.ConfigureTestServices(services =>
         {
+            TestAuthentication.Configure(services);
             services.RemoveAll<IOutboundRequestExecutor>();
             services.AddSingleton<IOutboundRequestExecutor>(executor);
             services.RemoveAll<IRequestHistoryRepository>();

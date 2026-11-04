@@ -242,6 +242,7 @@ public sealed class Story9CloseoutTests
     private static WebApplicationFactory<Program> CreateApiFactory(Uri target, RecordingHistoryRepository history) =>
         new WebApplicationFactory<Program>().WithWebHostBuilder(builder => builder.ConfigureTestServices(services =>
         {
+            TestAuthentication.Configure(services);
             services.RemoveAll<IOutboundRequestExecutor>();
             services.AddSingleton<IOutboundRequestExecutor>(new GuardedTargetHttpClient(
                 OutboundPolicy.ForTestOnlyLoopbackEndpoint(target),
@@ -253,6 +254,7 @@ public sealed class Story9CloseoutTests
     private static WebApplicationFactory<Program> CreateProductionApiFactory(RecordingHistoryRepository history) =>
         new WebApplicationFactory<Program>().WithWebHostBuilder(builder => builder.ConfigureTestServices(services =>
         {
+            TestAuthentication.Configure(services);
             services.RemoveAll<IRequestHistoryRepository>();
             services.AddSingleton<IRequestHistoryRepository>(history);
         }));

@@ -17,7 +17,7 @@ public static class TracerEndpoints
         app.Use(async (context, next) =>
         {
             var isTracerRequest = context.GetEndpoint()?.Metadata.GetMetadata<TracerRequestGuardMetadata>() is not null
-                || context.Request.Path.StartsWithSegments("/api/tracer", StringComparison.OrdinalIgnoreCase);
+                || context.Request.Path.StartsWithSegments("/api", StringComparison.OrdinalIgnoreCase);
             if (isTracerRequest)
             {
                 var maxBodyBytes = context.Request.Path.Equals("/api/tracer/export", StringComparison.OrdinalIgnoreCase)
@@ -56,7 +56,7 @@ public static class TracerEndpoints
 
     public static void MapTracerEndpoints(this WebApplication app)
     {
-        app.MapGet("/health", () => Results.Ok(new { status = "healthy" }));
+        app.MapGet("/health", () => Results.Ok(new { status = "healthy" })).AllowAnonymous();
     }
 }
 

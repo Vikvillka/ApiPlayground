@@ -1,12 +1,15 @@
 using System.Text.Json;
 using ApiPlayground.Domain.Requests;
+using Microsoft.AspNetCore.Identity;
+using Microsoft.AspNetCore.Identity.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.ChangeTracking;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 
 namespace ApiPlayground.Api.Data;
 
-public sealed class PlatformDbContext(DbContextOptions<PlatformDbContext> options) : DbContext(options)
+public sealed class PlatformDbContext(DbContextOptions<PlatformDbContext> options)
+	: IdentityUserContext<IdentityUser<Guid>, Guid>(options)
 {
 	private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web);
 
@@ -16,6 +19,8 @@ public sealed class PlatformDbContext(DbContextOptions<PlatformDbContext> option
 
 	protected override void OnModelCreating(ModelBuilder modelBuilder)
 	{
+		base.OnModelCreating(modelBuilder);
+
 		var history = modelBuilder.Entity<RequestHistoryEntity>();
 		history.ToTable("request_history");
 		history.HasKey(item => item.Id);

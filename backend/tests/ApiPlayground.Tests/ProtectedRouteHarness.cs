@@ -60,9 +60,12 @@ internal static class ProtectedRouteHarness
         return request;
     }
 
+    internal static string Credentials(string email, string password) =>
+        JsonSerializer.Serialize(new { email, password });
+
     internal static async Task<SignedInUser> RegisterAndLogInAsync(HttpClient client, string email)
     {
-        var credentials = JsonSerializer.Serialize(new { email, password = Password });
+        var credentials = Credentials(email, Password);
 
         var register = await client.SendAsync(CreateRequest(HttpMethod.Post, "/api/auth/register", credentials));
         Assert.Equal(HttpStatusCode.Created, register.StatusCode);
@@ -101,7 +104,7 @@ internal static class ProtectedRouteHarness
         throw new InvalidOperationException($"The response has no '{name}' field.");
     }
 
-    private static string ReadSessionCookie(HttpResponseMessage response)
+    internal static string ReadSessionCookie(HttpResponseMessage response)
     {
         Assert.True(response.Headers.TryGetValues("Set-Cookie", out var values), "Login must set a session cookie.");
         var cookie = values!.FirstOrDefault(value => value.StartsWith(CookieName + "=", StringComparison.Ordinal));

@@ -1,0 +1,113 @@
+# tickets.toml — the epic's agreed children, in build order. tickets.py reads it.
+# The order of the tables is the build order: move a table to reorder. `id` names a child for good and is never reused.
+
+[[entry]]
+id = 1
+type = "story"
+title = "Tracer: register, log in, cookie session, one protected route"
+description = "Adds Identity in Infrastructure, register, login, and logout endpoints, the cookie session, the default-deny fallback policy, and the request guard extended to /api/*."
+verify = "Register and log in through the API, get 401 on the protected route without the cookie and 200 with it, against PostgreSQL."
+covers = ["FR-1", "FR-4", "FR-5", "FR-6", "NFR-1", "NFR-2"]
+after = []
+hitl = true
+risk = "medium"
+
+[[entry]]
+id = 2
+type = "story"
+title = "Registration and login rejections"
+description = "Rejects a duplicate email with a clear message, returns one generic message for bad credentials, and stores only a password hash. Password minimum is 8 characters with no composition rules (decision 2026-11-04)."
+verify = "A duplicate email returns a clear error; a wrong password and an unknown email return the same message; the database holds no plain-text password."
+covers = ["FR-2", "FR-3", "NFR-3"]
+after = [1]
+hitl = false
+risk = "low"
+
+[[entry]]
+id = 3
+type = "story"
+title = "Ownership model and data-wipe migration"
+description = "Adds a required OwnerId to collections, saved requests, and history, and generates the migration with dotnet ef migrations add, including SQL that clears the three data tables before the foreign keys."
+verify = "The migration applies on an empty and on a populated database; the three tables are empty afterward and OwnerId is non-null with a foreign key to users."
+covers = ["FR-8", "FR-11"]
+after = [1]
+hitl = false
+risk = "high"
+plan_checkpoint = true
+
+[[entry]]
+id = 4
+type = "story"
+title = "Per-user collections and saved requests"
+description = "Passes OwnerId explicitly through the use cases and ports for collections and saved requests, adds the EF global query filter, and returns not found for another user's id."
+verify = "User A cannot read, list, update, or delete user B's collection or saved request; the response is 404 both ways."
+covers = ["FR-8", "FR-9"]
+after = [3]
+hitl = false
+risk = "medium"
+
+[[entry]]
+id = 5
+type = "story"
+title = "Per-user history, request send, and export"
+description = "Applies the same explicit owner and query filter to history, the request send path, and export."
+verify = "User A's history and export contain only user A's entries; a send by user A is recorded only under user A."
+covers = ["FR-8", "FR-9"]
+after = [4]
+hitl = false
+risk = "medium"
+
+[[entry]]
+id = 6
+type = "story"
+title = "Login, registration, and logout screens"
+description = "Adds the frontend login and registration forms and the logout action through the existing request layer on the same-origin proxy."
+verify = "A visitor registers and logs in from the browser; errors show in the form without breaking it; the session survives a page reload."
+covers = ["FR-1", "FR-2", "FR-4", "FR-5", "FR-6"]
+after = [1]
+hitl = false
+risk = "low"
+
+[[entry]]
+id = 7
+type = "story"
+title = "Session state, current user, and 401 handling"
+description = "Holds the session in a MobX store, shows the current user with a logout action, shows only login and registration when signed out, and sends the user to login on a 401."
+verify = "Signed-out visitors see only login and registration; signed-in users see their name and can log out; an expired session returns to login."
+covers = ["FR-7"]
+after = [6]
+hitl = false
+risk = "low"
+
+[[entry]]
+id = 8
+type = "story"
+title = "Isolation and anonymous-rejection test suites"
+description = "Adds backend tests that enumerate every data and dispatch route and reject anonymous calls, and two-user isolation tests on PostgreSQL that fail rather than skip when the database is missing."
+verify = "The suites run in dotnet test; removing the database makes them fail; a new route not in the enumeration makes the enumeration test fail."
+covers = ["FR-9", "FR-10", "NFR-4"]
+after = [5]
+hitl = false
+risk = "medium"
+
+[[entry]]
+id = 9
+type = "story"
+title = "Refactor sweep"
+description = "Cleans up auth code deferred from the stories above; scope is set from their plans and review findings when it starts, cleanup only."
+verify = "The unit and end-to-end suites pass unchanged after the sweep."
+covers = []
+after = [1, 2, 3, 4, 5, 6, 7, 8]
+hitl = false
+risk = "low"
+
+[[entry]]
+id = 10
+type = "story"
+title = "End-to-end scenario UJ-1 in the browser"
+description = "Runs the Vika and Petya scenario on one instance: register, create data, log out, log back in, and confirm that the other user sees nothing."
+verify = "The Playwright suite passes on the local stack with two users and fails when isolation is broken."
+covers = ["FR-1", "FR-8", "FR-9", "FR-10"]
+after = [9]
+hitl = false
+risk = "medium"

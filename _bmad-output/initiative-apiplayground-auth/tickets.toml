@@ -1,0 +1,9 @@
+# tickets.toml — the initiative's epics, in build order. tickets.py reads it.
+# An initiative's file holds [[epic]] tables; the order of the tables is the build order.
+
+[[epic]]
+id = 1
+slug = "epic-apiplayground-auth"
+title = "Accounts, sessions, and per-user data"
+covers = ["FR-1", "FR-2", "FR-3", "FR-4", "FR-5", "FR-6", "FR-7", "FR-8", "FR-9", "FR-10", "FR-11", "NFR-1", "NFR-2", "NFR-3", "NFR-4"]
+after = []

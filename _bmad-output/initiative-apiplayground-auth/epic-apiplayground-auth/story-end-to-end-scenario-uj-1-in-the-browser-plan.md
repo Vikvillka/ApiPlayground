@@ -3,7 +3,7 @@ title: 'End-to-end scenario UJ-1 in the browser'
 type: 'feature'
 ticket: '10'
 created: '2026-11-04'
-status: in-progress
+status: done
 route: 'full'
 risk: 'medium'
 context: ['_bmad-output/initiative-apiplayground-auth/architecture-apiplayground-auth/architecture-apiplayground-auth.md']
@@ -38,3 +38,8 @@ context: ['_bmad-output/initiative-apiplayground-auth/architecture-apiplayground
 
 **Deviations from plan:**
 - None.
+
+**Closure (2026-11-05):**
+- Closed as `done` on the user's confirmation.
+- Verification on 2026-11-05: `npm run test:e2e` 2/2 (story9-mvp, uj1-two-users).
+- Open note: the second acceptance criterion (temporary break of collection owner scoping, then revert, to confirm UJ-1 fails) is not recorded in this closure. It was not re-run on 2026-11-05.

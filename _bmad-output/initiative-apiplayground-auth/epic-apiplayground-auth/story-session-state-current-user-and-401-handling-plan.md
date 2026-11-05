@@ -3,7 +3,7 @@ title: 'Session state, current user, and 401 handling'
 type: 'feature'
 ticket: '7'
 created: '2026-11-04'
-status: in-progress
+status: done
 route: 'full'
 risk: 'low'
 context: ['_bmad-output/initiative-apiplayground-auth/architecture-apiplayground-auth/architecture-apiplayground-auth.md']
@@ -61,3 +61,7 @@ context: ['_bmad-output/initiative-apiplayground-auth/architecture-apiplayground
 **Verification record (2026-11-04):**
 - `npm test` from `frontend/`: 87 passed, 0 failed (10 files)
 - `npm run build` from `frontend/`: OK (`tsc --noEmit` and Vite build, existing chunk-size warning only)
+
+**Closure (2026-11-05):**
+- Closed as `done`. The user confirmed the deviations above: the full-page `AuthScreen` replaces the 1.6 dialog, and the header shows the email from `/api/auth/me` instead of the id.
+- Verification on 2026-11-05: backend 214/214, frontend `npm test` 88/88, `npm run build` OK, `npm run test:e2e` 2/2.

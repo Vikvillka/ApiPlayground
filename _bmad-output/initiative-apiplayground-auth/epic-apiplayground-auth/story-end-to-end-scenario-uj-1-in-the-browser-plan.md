@@ -42,4 +42,4 @@ context: ['_bmad-output/initiative-apiplayground-auth/architecture-apiplayground
 **Closure (2026-11-05):**
 - Closed as `done` on the user's confirmation.
 - Verification on 2026-11-05: `npm run test:e2e` 2/2 (story9-mvp, uj1-two-users).
-- Open note: the second acceptance criterion (temporary break of collection owner scoping, then revert, to confirm UJ-1 fails) is not recorded in this closure. It was not re-run on 2026-11-05.
+- Isolation check on 2026-11-05: owner scoping was broken temporarily in `PostgresRequestCollectionRepository.ListAsync` (removed the `OwnerId` filter) and in the `RequestCollections` query filter (`OwnerScope` check only). `npm run test:e2e` then failed UJ-1 (timeout waiting for "New collection name", because the other user's collection was visible). The changes were reverted with `git checkout`, and the rerun passed 2/2.

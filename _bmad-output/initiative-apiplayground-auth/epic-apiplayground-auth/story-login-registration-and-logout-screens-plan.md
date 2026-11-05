@@ -3,7 +3,7 @@ title: 'Login, registration, and logout screens'
 type: 'feature'
 ticket: '6'
 created: '2026-11-04'
-status: built
+status: done
 route: 'full'
 risk: 'low'
 context: ['_bmad-output/initiative-apiplayground-auth/architecture-apiplayground-auth/architecture-apiplayground-auth.md']
@@ -56,3 +56,7 @@ context: ['_bmad-output/initiative-apiplayground-auth/architecture-apiplayground
 **Verification record (2026-11-04):**
 - `npm test` from `frontend/`: 82 passed, 0 failed (9 files)
 - `npm run build` from `frontend/`: OK (existing chunk-size warning only)
+
+**Closure (2026-11-05):**
+- Closed as `done`. The auth dialog from the frozen intent above was replaced by the full-page `AuthScreen` in ticket 7 (`story-session-state-current-user-and-401-handling-plan.md`). The replacement was confirmed by the user.
+- The frozen section above is unchanged.

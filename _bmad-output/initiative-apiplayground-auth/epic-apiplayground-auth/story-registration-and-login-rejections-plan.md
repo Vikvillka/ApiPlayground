@@ -3,7 +3,7 @@ title: 'Registration and login rejections'
 type: 'feature'
 ticket: '2'
 created: '2026-11-04'
-status: built
+status: done
 baseline_revision: 'e2ba83a'
 route: 'oneshot'
 route_source: 'pinned'

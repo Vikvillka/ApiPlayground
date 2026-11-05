@@ -3,7 +3,7 @@ title: 'Ownership model and data-wipe migration'
 type: 'feature'
 ticket: '3'
 created: '2026-11-04'
-status: built
+status: done
 route: 'full'
 risk: 'high'
 context: ['_bmad-output/initiative-apiplayground-auth/architecture-apiplayground-auth/architecture-apiplayground-auth.md']

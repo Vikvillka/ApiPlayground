@@ -3,7 +3,7 @@ title: 'Tracer: register, log in, cookie session, one protected route'
 type: 'feature'
 ticket: '1'
 created: '2026-11-04'
-status: built
+status: done
 baseline_revision: '948580a77778f0f23e436b38cbceff4151381cf9'
 route: 'full'
 route_source: 'pinned'

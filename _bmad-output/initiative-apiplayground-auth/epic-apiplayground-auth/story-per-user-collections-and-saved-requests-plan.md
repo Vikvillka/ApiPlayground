@@ -3,7 +3,7 @@ title: 'Per-user collections and saved requests'
 type: 'feature'
 ticket: '4'
 created: '2026-11-04'
-status: built
+status: done
 route: 'full'
 risk: 'medium'
 context: ['_bmad-output/initiative-apiplayground-auth/architecture-apiplayground-auth/architecture-apiplayground-auth.md']

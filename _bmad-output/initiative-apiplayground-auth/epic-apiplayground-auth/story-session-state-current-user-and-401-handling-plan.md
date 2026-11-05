@@ -3,7 +3,7 @@ title: 'Session state, current user, and 401 handling'
 type: 'feature'
 ticket: '7'
 created: '2026-11-04'
-status: built
+status: in-progress
 route: 'full'
 risk: 'low'
 context: ['_bmad-output/initiative-apiplayground-auth/architecture-apiplayground-auth/architecture-apiplayground-auth.md']

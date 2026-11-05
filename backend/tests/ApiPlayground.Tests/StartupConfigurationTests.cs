@@ -29,10 +29,15 @@ public sealed class StartupConfigurationTests
 
         var exception = Record.Exception(() => factory.CreateClient());
 
+        // Full exception text goes into the failure message so an intermittent failure shows its real cause.
         Assert.NotNull(exception);
         var text = exception.ToString();
-        Assert.Contains("OptionsValidationException", text);
-        Assert.Contains(PostgresOptions.ValidationMessage, text);
+        Assert.True(
+            text.Contains("OptionsValidationException", StringComparison.Ordinal),
+            $"Expected OptionsValidationException. Actual exception:{Environment.NewLine}{text}");
+        Assert.True(
+            text.Contains(PostgresOptions.ValidationMessage, StringComparison.Ordinal),
+            $"Expected validation message '{PostgresOptions.ValidationMessage}'. Actual exception:{Environment.NewLine}{text}");
     }
 
     [Fact]

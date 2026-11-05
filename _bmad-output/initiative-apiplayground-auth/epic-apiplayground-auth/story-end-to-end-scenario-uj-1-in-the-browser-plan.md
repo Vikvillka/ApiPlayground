@@ -3,7 +3,7 @@ title: 'End-to-end scenario UJ-1 in the browser'
 type: 'feature'
 ticket: '10'
 created: '2026-11-04'
-status: built
+status: in-progress
 route: 'full'
 risk: 'medium'
 context: ['_bmad-output/initiative-apiplayground-auth/architecture-apiplayground-auth/architecture-apiplayground-auth.md']

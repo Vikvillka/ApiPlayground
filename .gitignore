@@ -67,3 +67,7 @@ frontend/test-results/
 # Local reference screenshot
 /image.png
 _bmad-output/bmad-process-report.md
+
+# BMad tooling (installed, not project artifacts)
+.agents/
+_bmad/
